@@ -312,4 +312,3 @@ but as a collection of thinking partners with different viewpoints.
 Our role is to make those viewpoints  
 clear, structured, and understandable at a glance.
 
-<img width="451" height="686" alt="image" src="https://github.com/user-attachments/assets/d5025cbf-32af-426e-9135-94e78c5fddbc" />
