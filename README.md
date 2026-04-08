@@ -1,6 +1,7 @@
-# team_chorus
-Not just better answers. A better you. -- Team Chorus
+# Team Chorus
+> *Not just better answers. A better you.*
 
+---
 # Chorus
 > A workspace where multiple LLMs speak at once — you synthesize the rest.
 
