@@ -45,15 +45,24 @@ function makeTitle(text: string): string {
 }
 
 // ── 시스템 프롬프트 ───────────────────────────────────────────────────────────
-function buildSystemPrompt(step: Step, crossContext: string): string {
+function buildSystemPrompt(step: Step, crossContext: string, exchangeCount = 0): string {
   const crossBlock = crossContext
-    ? `\n[다른 AI가 이미 확인한 정보]\n${crossContext}\n`
+    ? `\n[다른 AI가 이미 보호자에게 확인한 정보 — 아래 내용은 절대 다시 묻지 마세요]\n${crossContext}\n`
     : ''
 
   if (step === 'symptom-qa') {
+    // 3번 이상 질문했으면 마무리
+    if (exchangeCount >= 3) {
+      return `당신은 경험 많은 수의 전문가입니다.${crossBlock}
+지금까지 충분히 대화했습니다. 더 이상 질문하지 마세요.
+보호자의 마지막 답변을 듣고, 지금까지 파악한 내용을 1~2줄로 간단히 정리한 후
+"다른 AI와도 이야기해보시거나, 이제 진단을 받아보셔도 좋을 것 같아요." 라고 마무리하세요.
+한국어로 답변하세요.`
+    }
+
     return `당신은 경험 많은 수의 전문가입니다.${crossBlock}
-보호자가 증상을 설명하면, 더 정확한 진단을 위해 추가 질문을 1~2개 해주세요.
-- 이미 확인된 정보는 다시 묻지 마세요
+보호자가 증상을 설명하면, 아직 확인되지 않은 정보만 1~2개 질문하세요.
+- 위 [다른 AI가 이미 확인한 정보]에 있는 내용은 절대 다시 묻지 마세요
 - 아직 진단하지 마세요
 - 질문은 짧고 명확하게, 한국어로 답변하세요`
   }
@@ -125,6 +134,9 @@ export default function Home() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [diagnosisSummary, setDiagnosisSummary] = useState<DiagnosisSummary | null>(null)
   const [diagnosisSummaryLoading, setDiagnosisSummaryLoading] = useState(false)
+  const [sharedPanels, setSharedPanels] = useState<Record<LLMId, boolean>>({
+    claude: false, chatgpt: false, gemini: false, llama: false,
+  })
   const [history, setHistory] = useState<Conversation[]>([])
   const [activeId, setActiveId] = useState<string>(() => Date.now().toString())
 
@@ -133,6 +145,10 @@ export default function Home() {
   const selectedIds = LLM_IDS.filter(id => selected[id])
   const noneSelected = selectedIds.length === 0
   const allSelected = selectedIds.length === LLM_IDS.length
+  const totalAssistantMsgs = LLM_IDS.reduce(
+    (sum, id) => sum + llms[id].messages.filter(m => m.role === 'assistant').length, 0
+  )
+  const showDiagnosisNudge = step === 'symptom-qa' && totalAssistantMsgs >= 4 && !isAnyLoading
   const prevLoadingRef = useRef(false)
   const diagnosisSummaryTriggeredRef = useRef(false)
 
@@ -289,10 +305,25 @@ export default function Home() {
 
     // 크로스 컨텍스트: 전송 대상이 아닌 LLM의 대화 내용
     const crossContext = buildCrossContext(llms, targets)
-    const systemPrompt = buildSystemPrompt(targetStep, crossContext)
+
+    // LLM별 exchangeCount (assistant 메시지 수) 계산 → 시스템 프롬프트 개별 생성
+    const systemPromptPer: Record<LLMId, string> = {} as Record<LLMId, string>
+    for (const id of targets) {
+      const exchangeCount = llms[id].messages.filter(m => m.role === 'assistant').length
+      systemPromptPer[id] = buildSystemPrompt(targetStep, crossContext, exchangeCount)
+    }
 
     setPrompt('')
     setSummary(null)
+
+    // 후속 메시지이고 일부 패널에만 전송할 때 → 나머지 패널에 "공유됨" 표시
+    if (hasMessages && targets.length < LLM_IDS.length) {
+      const others = LLM_IDS.filter(id => !targets.includes(id))
+      const shared = { claude: false, chatgpt: false, gemini: false, llama: false } as Record<LLMId, boolean>
+      others.forEach(id => { shared[id] = true })
+      setSharedPanels(shared)
+      setTimeout(() => setSharedPanels({ claude: false, chatgpt: false, gemini: false, llama: false }), 2000)
+    }
 
     setLlms(prev => {
       const next = { ...prev }
@@ -315,9 +346,10 @@ export default function Home() {
         const res = await fetch(`/api/chat/${id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: currentMessages, systemPrompt }),
+          body: JSON.stringify({ messages: currentMessages, systemPrompt: systemPromptPer[id] }),
         })
         const data = await res.json() as { content: string }
+        const newExchangeCount = currentMessages.filter(m => m.role === 'assistant').length + 1
         setLlms(prev => ({
           ...prev,
           [id]: {
@@ -326,6 +358,10 @@ export default function Home() {
             loading: false,
           },
         }))
+        // 3번 마무리됐으면 해당 패널 자동 해제
+        if (newExchangeCount >= 3) {
+          setSelected(prev => ({ ...prev, [id]: false }))
+        }
       } catch {
         setLlms(prev => ({
           ...prev,
@@ -416,13 +452,24 @@ export default function Home() {
               </button>
             )}
             {step === 'symptom-qa' && hasMessages && !isAnyLoading && (
-              <button
-                onClick={handleDiagnosis}
-                className="text-sm px-4 py-2 rounded-lg font-medium cursor-pointer"
-                style={{ background: '#cc785c', color: '#fff' }}
-              >
-                진단 받기 →
-              </button>
+              <div className="flex flex-col items-end gap-1">
+                {showDiagnosisNudge && (
+                  <span className="text-xs" style={{ color: '#cc785c' }}>
+                    충분한 정보가 모였어요 ↓
+                  </span>
+                )}
+                <button
+                  onClick={handleDiagnosis}
+                  className="text-sm px-4 py-2 rounded-lg font-medium cursor-pointer transition-all"
+                  style={{
+                    background: '#cc785c',
+                    color: '#fff',
+                    boxShadow: showDiagnosisNudge ? '0 0 0 2px #cc785c55' : 'none',
+                  }}
+                >
+                  진단 받기 →
+                </button>
+              </div>
             )}
           </div>
         </header>
@@ -474,6 +521,7 @@ export default function Home() {
                 selected={selected[id]}
                 onToggleSelect={() => toggleSelect(id)}
                 step={step}
+                showShared={sharedPanels[id]}
               />
             ))}
           </div>

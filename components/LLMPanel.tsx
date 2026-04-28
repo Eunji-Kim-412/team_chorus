@@ -25,9 +25,10 @@ type Props = {
   selected: boolean
   onToggleSelect: () => void
   step: 'symptom-qa' | 'diagnosis'
+  showShared?: boolean
 }
 
-export default function LLMPanel({ llmId, messages, loading, selected, onToggleSelect, step }: Props) {
+export default function LLMPanel({ llmId, messages, loading, selected, onToggleSelect, step, showShared }: Props) {
   const config = LLM_CONFIGS[llmId]
   const bottomRef = useRef<HTMLDivElement>(null)
   const isEmpty = messages.length === 0 && !loading
@@ -56,6 +57,14 @@ export default function LLMPanel({ llmId, messages, loading, selected, onToggleS
         </span>
 
         <div className="ml-auto flex items-center gap-2">
+          {showShared && (
+            <span
+              className="text-xs"
+              style={{ color: config.color, opacity: 0.85 }}
+            >
+              ↗ 공유됨
+            </span>
+          )}
           {step === 'diagnosis' && messages.some(m => m.role === 'assistant') && (
             <span
               className="text-xs px-2 py-0.5 rounded-full"

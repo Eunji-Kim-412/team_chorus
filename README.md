@@ -61,9 +61,7 @@
 cd pet-app
 npm install
 
-# 2. 환경변수 설정
-# .env.local 파일 생성 (아래 내용 복사)
-# API 키는 Ellie에게 직접 받으세요 — 절대 코드에 넣지 마세요
+# 2. 환경변수 설정 (.env.local 파일 직접 만들기)
 
 # 3. 실행
 npm run dev
@@ -77,6 +75,8 @@ ANTHROPIC_API_KEY=여기에_키_입력
 GEMINI_API_KEY=여기에_키_입력
 OPENAI_API_KEY=여기에_키_입력
 ```
+
+> `.env.local` 파일은 깃헙에 올라가지 않아요. 직접 만들어서 키를 넣어주세요.
 
 ### 현재 API 키 상태
 | LLM | 상태 | 비고 |
