@@ -238,7 +238,7 @@ export default function Home() {
     if (!conv) return
     setActiveId(conv.id)
     setLlms(conv.llms)
-    setStep(conv.step)
+    setStep('symptom-qa')   // 항상 입력창이 보이도록
     setSelected({ claude: false, chatgpt: false, gemini: false, llama: false })
     setSummary(null)
     setDiagnosisSummary(null)
@@ -432,6 +432,15 @@ export default function Home() {
           </span>
 
           <div className="flex items-center gap-2">
+            {step === 'diagnosis' && (
+              <button
+                onClick={handleContinueQA}
+                className="text-xs px-3 py-1.5 rounded-lg cursor-pointer"
+                style={{ background: '#1e1e1e', color: '#888', border: '1px solid #2a2a2a' }}
+              >
+                ↩ 추가 문답하기
+              </button>
+            )}
             {!allSelected && step === 'symptom-qa' && (
               <button
                 onClick={selectAll}
@@ -452,24 +461,17 @@ export default function Home() {
               </button>
             )}
             {step === 'symptom-qa' && hasMessages && !isAnyLoading && (
-              <div className="flex flex-col items-end gap-1">
-                {showDiagnosisNudge && (
-                  <span className="text-xs" style={{ color: '#cc785c' }}>
-                    충분한 정보가 모였어요 ↓
-                  </span>
-                )}
-                <button
-                  onClick={handleDiagnosis}
-                  className="text-sm px-4 py-2 rounded-lg font-medium cursor-pointer transition-all"
-                  style={{
-                    background: '#cc785c',
-                    color: '#fff',
-                    boxShadow: showDiagnosisNudge ? '0 0 0 2px #cc785c55' : 'none',
-                  }}
-                >
-                  진단 받기 →
-                </button>
-              </div>
+              <button
+                onClick={handleDiagnosis}
+                className="text-sm px-4 py-2 rounded-lg font-medium cursor-pointer transition-all"
+                style={{
+                  background: '#cc785c',
+                  color: '#fff',
+                  boxShadow: showDiagnosisNudge ? '0 0 0 2px #cc785c55' : 'none',
+                }}
+              >
+                진단 받기 →
+              </button>
             )}
           </div>
         </header>
@@ -493,6 +495,17 @@ export default function Home() {
               <p className="text-xs text-center" style={{ color: '#666' }}>
                 ↓ 답변할 AI 패널을 선택하세요
               </p>
+            )}
+            {showDiagnosisNudge && (
+              <div className="flex justify-center">
+                <button
+                  onClick={handleDiagnosis}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium cursor-pointer"
+                  style={{ background: '#cc785c33', color: '#e8956d', border: '1px solid #cc785c66' }}
+                >
+                  충분한 정보가 모였어요 — 진단을 받아볼까요?
+                </button>
+              </div>
             )}
             <SummaryPanel summary={summary} loading={summaryLoading} />
           </div>
