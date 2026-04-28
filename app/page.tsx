@@ -6,6 +6,7 @@ import SymptomInput from '@/components/SymptomInput'
 import SummaryPanel from '@/components/SummaryPanel'
 import DiagnosisPanel from '@/components/DiagnosisPanel'
 import Sidebar from '@/components/Sidebar'
+import PetInfoForm, { type PetContext } from '@/components/PetInfoForm'
 import type { SummaryResult } from '@/app/api/summarize/route'
 import type { DiagnosisSummary } from '@/app/api/diagnose-summary/route'
 
@@ -103,6 +104,7 @@ function buildCrossContext(
 
 // ── localStorage ─────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'pawsori_history_v1'
+const PET_CONTEXT_STORAGE_KEY = 'team_chorus_f1_selected_pet_context_v1'
 
 function loadHistory(): Conversation[] {
   try {
@@ -115,8 +117,18 @@ function saveHistory(history: Conversation[]) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(history)) } catch { /* noop */ }
 }
 
+function loadPetContext(): PetContext | null {
+  try {
+    const raw = localStorage.getItem(PET_CONTEXT_STORAGE_KEY)
+    return raw ? (JSON.parse(raw) as PetContext) : null
+  } catch {
+    return null
+  }
+}
+
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function Home() {
+  const [petContext, setPetContext] = useState<PetContext | null>(null)
   const [step, setStep] = useState<Step>('symptom-qa')
   const [llms, setLlms] = useState<Record<LLMId, LLMState>>(initialLlmState())
   const [selected, setSelected] = useState<Record<LLMId, boolean>>(initialSelected())
@@ -139,6 +151,12 @@ export default function Home() {
   // ── localStorage 초기 로드 ────────────────────────────────────────────────
   useEffect(() => {
     setHistory(loadHistory())
+    setPetContext(loadPetContext())
+  }, [])
+
+  const handleStartWithPetInfo = useCallback((context: PetContext) => {
+    setPetContext(context)
+    localStorage.setItem(PET_CONTEXT_STORAGE_KEY, JSON.stringify(context))
   }, [])
 
   // loading 상태 추적 (대화 저장용)
@@ -369,6 +387,10 @@ export default function Home() {
     return '추가로 알려주실 내용이 있나요?'
   })()
 
+  if (!petContext) {
+    return <PetInfoForm onStart={handleStartWithPetInfo} />
+  }
+
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: '#080808' }}>
 
@@ -388,14 +410,29 @@ export default function Home() {
           className="flex items-center justify-between px-6 py-4 shrink-0"
           style={{ borderBottom: '1px solid #1e1e1e' }}
         >
-          <span
-            className="text-xs px-2 py-0.5 rounded-full"
-            style={{ background: '#1e1e1e', color: '#555', border: '1px solid #2a2a2a' }}
-          >
-            {step === 'symptom-qa' ? '증상 파악 중' : '진단 결과'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{ background: '#1e1e1e', color: '#555', border: '1px solid #2a2a2a' }}
+            >
+              {step === 'symptom-qa' ? '증상 파악 중' : '진단 결과'}
+            </span>
+            <span
+              className="text-xs px-2 py-0.5 rounded-full"
+              style={{ background: '#1a1a2e', color: '#8ab4f8', border: '1px solid #1a2a4a' }}
+            >
+              {petContext.pet.name} · {petContext.pet.breed} · {petContext.pet.age.years}살
+            </span>
+          </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPetContext(null)}
+              className="text-xs px-3 py-1.5 rounded-lg cursor-pointer"
+              style={{ background: '#1e1e1e', color: '#888', border: '1px solid #2a2a2a' }}
+            >
+              펫 정보 수정
+            </button>
             {!allSelected && step === 'symptom-qa' && (
               <button
                 onClick={selectAll}
