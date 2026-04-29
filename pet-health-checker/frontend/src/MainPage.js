@@ -1,8 +1,32 @@
 import React, { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import { diagnose, getHistory } from "./api";
+import HospitalSection from "./HospitalSection";
+import SymptomSummaryCard from "./SymptomSummaryCard";
 
 const MODEL_COLORS = { "Claude (Bedrock)": "#d97706", "GPT (OpenAI)": "#10a37f", "Gemini (Google)": "#4285f4" };
+
+const MOCK_RESULT = {
+  needs_hospital: true,
+  summary: "반복적인 구토와 식욕 저하가 있어 오늘 중 동물병원 방문을 권장합니다.",
+  results: [
+    {
+      model: "Claude (Bedrock)",
+      diagnosis: "**의심 진단:** 급성 위장염 또는 이물질 섭취\n\n반복적인 구토와 식욕 저하는 위장관 자극 또는 이물질에 의한 폐색 가능성을 시사합니다. 탈수 증상 여부를 확인하고 오늘 중 수의사 진료를 받으세요.\n\n- 위험도: **8.0 / 10**\n- Red flags: 혈변, 12시간 이상 지속 구토",
+      error: null,
+    },
+    {
+      model: "GPT (OpenAI)",
+      diagnosis: "**의심 진단:** 위장관 장애 (위염 또는 장염)\n\n증상 패턴상 위염 또는 장염이 가장 유력합니다. 음수 거부가 동반된다면 탈수 위험이 높으므로 즉시 병원을 방문하세요.\n\n- 위험도: **7.5 / 10**\n- Red flags: 무기력증, 지속적 식욕 부진",
+      error: null,
+    },
+    {
+      model: "Gemini (Google)",
+      diagnosis: "**의심 진단:** 급성 위염 또는 췌장염\n\n구토 반복과 식욕 저하의 조합은 췌장염 가능성도 배제할 수 없습니다. 지방이 많은 음식 섭취 이력이 있다면 더욱 주의가 필요합니다.\n\n- 위험도: **8.2 / 10**\n- Red flags: 복부 팽만, 황달",
+      error: null,
+    },
+  ],
+};
 
 export default function MainPage() {
   const [petType, setPetType] = useState("");
@@ -15,6 +39,22 @@ export default function MainPage() {
   const [history, setHistory] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [showSummaryCard, setShowSummaryCard] = useState(false);
+  const [diagnosisTime, setDiagnosisTime] = useState(null);
+  const [fetchError, setFetchError] = useState("");
+
+  const applyDiagnosisData = (data) => {
+    setResults(data.results);
+    setSummary(data.summary || "");
+    setNeedsHospital(data.needs_hospital || false);
+    setDiagnosisTime(new Date());
+    if (data.needs_hospital) {
+      navigator.geolocation?.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => setUserLocation(null)
+      );
+    }
+  };
 
   const handleDiagnose = async (e) => {
     e.preventDefault();
@@ -22,22 +62,25 @@ export default function MainPage() {
     setResults([]);
     setSummary("");
     setNeedsHospital(false);
+    setFetchError("");
     try {
       const data = await diagnose(petType, symptoms);
-      setResults(data.results);
-      setSummary(data.summary || "");
-      setNeedsHospital(data.needs_hospital || false);
-      if (data.needs_hospital) {
-        navigator.geolocation?.getCurrentPosition(
-          (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-          () => setUserLocation(null)
-        );
-      }
+      applyDiagnosisData(data);
     } catch (err) {
-      alert(err.message);
+      setFetchError(err.message || "서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해주세요.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleMockTest = () => {
+    setFetchError("");
+    setResults([]);
+    setSummary("");
+    setNeedsHospital(false);
+    if (!petType) setPetType("dog");
+    if (!symptoms) setSymptoms("어제부터 구토를 3번 했고, 사료를 전혀 먹지 않으려 합니다. 기운도 없어 보여요.");
+    applyDiagnosisData(MOCK_RESULT);
   };
 
   const loadHistory = async () => {
@@ -50,10 +93,6 @@ export default function MainPage() {
   };
 
   useEffect(() => { if (tab === "history") loadHistory(); }, [tab]);
-
-  const naverMapUrl = userLocation
-    ? `https://map.naver.com/v5/search/동물병원?c=${userLocation.lng},${userLocation.lat},15,0,0,0,dh`
-    : "https://map.naver.com/v5/search/내주변%20동물병원";
 
   return (
     <div className="main-container">
@@ -80,6 +119,18 @@ export default function MainPage() {
             <button type="submit" disabled={!petType || loading}>{loading ? "AI 분석 중..." : "진단 요청"}</button>
           </form>
 
+          <div style={{ marginTop: 8, textAlign: "center" }}>
+            <button type="button" onClick={handleMockTest} style={{ background: "none", border: "1px dashed #a5b4fc", color: "#4f46e5", borderRadius: 6, padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" }}>
+              🧪 F5 테스트 결과 보기
+            </button>
+          </div>
+
+          {fetchError && (
+            <div style={{ marginTop: 12, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, color: "#dc2626", fontSize: "0.9rem" }}>
+              ⚠️ {fetchError}
+            </div>
+          )}
+
           {loading && <div className="loading"><div className="spinner" /><p>AI 모델이 분석 중입니다...</p></div>}
 
           {results.length > 0 && (
@@ -101,13 +152,10 @@ export default function MainPage() {
                   </div>
 
                   {needsHospital ? (
-                    <div className="hospital-section">
-                      <h3>🏥 병원 방문을 권장합니다</h3>
-                      <p>증상의 심각도가 높아 가까운 동물병원 방문을 추천드립니다.</p>
-                      <a href={naverMapUrl} target="_blank" rel="noopener noreferrer" className="hospital-btn">
-                        📍 네이버 지도에서 주변 동물병원 찾기
-                      </a>
-                    </div>
+                    <HospitalSection
+                      userLocation={userLocation}
+                      onShowCard={() => setShowSummaryCard(true)}
+                    />
                   ) : (
                     <div className="safe-section">
                       <h3>😊 안심하세요!</h3>
@@ -154,6 +202,16 @@ export default function MainPage() {
             </ul>
           )}
         </div>
+      )}
+      {showSummaryCard && (
+        <SymptomSummaryCard
+          petType={petType}
+          symptoms={symptoms}
+          results={results}
+          summary={summary}
+          timestamp={diagnosisTime}
+          onClose={() => setShowSummaryCard(false)}
+        />
       )}
     </div>
   );
