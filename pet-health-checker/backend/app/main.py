@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import get_db_conn, init_db
-from app.models import DiagnoseRequest
-from app.llm import diagnose_all, summarize_results
+from app.models import DiagnoseRequest, HomecareRequest
+from app.llm import diagnose_all, summarize_results, call_gemini_homecare
 
 app = FastAPI(title="Pet Health Checker")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
@@ -29,6 +29,21 @@ async def diagnose(req: DiagnoseRequest):
     finally:
         db.close()
     return {"results": results, "summary": summary_data["summary"], "needs_hospital": summary_data["needs_hospital"]}
+
+@app.post("/api/homecare-guide")
+async def homecare_guide(req: HomecareRequest):
+    try:
+        guide = await call_gemini_homecare(
+            pet_type=req.pet_type,
+            breed=req.breed,
+            age_years=req.age_years,
+            medical_history=req.medical_history,
+            diagnosis_name=req.diagnosis_name,
+            urgency_score=req.urgency_score,
+        )
+        return {"guide": guide}
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/api/history")
 def history():

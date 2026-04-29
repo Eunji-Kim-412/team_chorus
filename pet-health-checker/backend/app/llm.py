@@ -136,6 +136,53 @@ async def summarize_results(pet_type: str, symptoms: str, results: list[dict]) -
         return {"summary": f"종합 분석 중 오류: {str(e)}", "needs_hospital": False}
 
 
+HOMECARE_PROMPT = """당신은 반려동물 케어 전문 AI입니다.
+아래 반려동물 정보와 진단 결과를 바탕으로 홈케어 가이드를 작성해주세요.
+
+규칙:
+- 약물 이름이나 용량은 절대 언급하지 마세요
+- "확실히 ~입니다" 같은 단정 표현 금지, "~가능성이 있습니다" 톤 유지
+- 각 항목은 구체적이고 실용적으로 작성
+- 반드시 아래 JSON 형식으로만 응답하세요
+
+{
+  "dos": ["해야 할 것 1", "해야 할 것 2", "해야 할 것 3", "해야 할 것 4"],
+  "donts": ["하지 말 것 1", "하지 말 것 2", "하지 말 것 3"],
+  "warningsigns": ["악화 신호 1", "악화 신호 2", "악화 신호 3", "악화 신호 4"]
+}"""
+
+
+async def call_gemini_homecare(pet_type: str, breed: str, age_years: int, medical_history: list, diagnosis_name: str, urgency_score: float) -> dict:
+    species = "강아지" if pet_type == "dog" else "고양이"
+    history_str = ", ".join(medical_history) if medical_history else "없음"
+    user_msg = f"""반려동물 정보:
+- 종: {species}
+- 품종: {breed or "미상"}
+- 나이: {age_years}살
+- 병력: {history_str}
+
+진단 결과:
+- 의심 증상: {diagnosis_name}
+- 위험도: {urgency_score}/10"""
+
+    def _invoke():
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL_ID,
+            contents=f"{HOMECARE_PROMPT}\n\n{user_msg}",
+        )
+        return resp.text
+
+    text = await asyncio.to_thread(_invoke)
+
+    # JSON 파싱
+    import re
+    match = re.search(r'\{.*\}', text, re.DOTALL)
+    if match:
+        return json.loads(match.group())
+    raise ValueError(f"Gemini가 올바른 JSON을 반환하지 않았습니다: {text}")
+
+
 async def _safe_call(name: str, fn, pet_type: str, symptoms: str) -> dict:
     try:
         text = await fn(pet_type, symptoms)

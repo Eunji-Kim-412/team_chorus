@@ -1,32 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
-const MOCK_DATA = {
-  petContext: {
-    pet: { name: "콩이", species: "dog", breed: "요크셔테리어", age: { years: 3, months: 0 } },
-  },
-  consolidatedUrgency: 3.2,
-  consolidatedDiagnoses: [{ name: "가벼운 소화불량" }],
-  guide: {
-    dos: [
-      "미지근한 물을 조금씩 자주 줍니다",
-      "따뜻하고 조용한 곳에서 쉬게 합니다",
-      "12시간 금식 후 소량의 부드러운 음식을 급여합니다",
-      "활동량과 식욕 변화를 꾸준히 관찰합니다",
-    ],
-    donts: [
-      "사람 음식(양파, 포도, 초콜릿 등)을 주지 마세요",
-      "인터넷에서 찾은 민간요법은 시도하지 마세요",
-      "임의로 약을 먹이지 마세요",
-      "증상이 있는 동안 격한 운동은 피해주세요",
-    ],
-    warningsigns: [
-      "12시간 이상 구토가 지속될 때",
-      "혈변 또는 혈뇨가 보일 때",
-      "의식이 흐려지거나 경련이 있을 때",
-      "물을 전혀 마시지 않고 탈수 증상이 보일 때",
-      "배가 눈에 띄게 부풀어 오를 때",
-    ],
-  },
+const FALLBACK_GUIDE = {
+  dos: ["미지근한 물을 조금씩 자주 줍니다", "따뜻하고 조용한 곳에서 쉬게 합니다", "활동량과 식욕 변화를 꾸준히 관찰합니다"],
+  donts: ["사람 음식을 주지 마세요", "인터넷 민간요법은 시도하지 마세요", "임의로 약을 먹이지 마세요"],
+  warningsigns: ["12시간 이상 증상이 지속될 때", "혈변 또는 혈뇨가 보일 때", "의식이 흐려지거나 경련이 있을 때"],
 };
 
 const URGENCY_LABEL = [
@@ -42,24 +19,68 @@ function getUrgencyInfo(score) {
 }
 
 export default function HomecareGuide({ diagnosisResult, onBackToDiagnose, onGoToHospital }) {
-  const data = diagnosisResult || MOCK_DATA;
-  const [useMock] = useState(!diagnosisResult);
+  const [guide, setGuide] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const { petContext, consolidatedUrgency, consolidatedDiagnoses, guide } = data;
+  const petContext = diagnosisResult?.petContext;
+  const consolidatedUrgency = diagnosisResult?.consolidatedUrgency ?? 3.2;
+  const consolidatedDiagnoses = diagnosisResult?.consolidatedDiagnoses ?? [{ name: "증상 분석 완료" }];
+
   const petName = petContext?.pet?.name || "우리 아이";
   const petBreed = petContext?.pet?.breed || "";
-  const petAge = petContext?.pet?.age
-    ? `${petContext.pet.age.years}살`
-    : "";
+  const petAge = petContext?.pet?.age ? `${petContext.pet.age.years}살` : "";
   const diagnosisName = consolidatedDiagnoses?.[0]?.name || "증상 분석 완료";
   const urgencyInfo = getUrgencyInfo(consolidatedUrgency);
 
+  useEffect(() => {
+    const fetchGuide = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/homecare-guide", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pet_type: petContext?.pet?.species || "dog",
+            breed: petBreed,
+            age_years: petContext?.pet?.age?.years || 0,
+            medical_history: petContext?.pet?.medicalHistory || [],
+            diagnosis_name: diagnosisName,
+            urgency_score: consolidatedUrgency,
+          }),
+        });
+        const data = await res.json();
+        if (data.guide) {
+          setGuide(data.guide);
+        } else {
+          setGuide(FALLBACK_GUIDE);
+          setError("AI 가이드 생성 실패 — 기본 가이드를 표시합니다");
+        }
+      } catch (e) {
+        setGuide(FALLBACK_GUIDE);
+        setError("서버 연결 실패 — 기본 가이드를 표시합니다");
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchGuide();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="homecare-container">
+        <div className="loading">
+          <div className="spinner" />
+          <p>Gemini가 홈케어 가이드를 작성 중입니다...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="homecare-container">
-      {useMock && (
-        <div className="mock-banner">
-          🧪 목업 데이터로 표시 중 — F3 연결 후 실제 데이터가 들어옵니다
-        </div>
+      {error && (
+        <div className="mock-banner">⚠️ {error}</div>
       )}
 
       {/* 펫 요약 칩 */}
