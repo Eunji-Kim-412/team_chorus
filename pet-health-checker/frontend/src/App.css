@@ -100,6 +100,12 @@ textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8p
 .print-btn { display: block; width: 100%; margin-top: 16px; padding: 13px; background: #111827; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; }
 .print-btn:hover { background: #1f2937; }
 
+/* 로딩 점 애니메이션 */
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 @media print {
   .modal-overlay { position: static; background: none; padding: 0; display: block; }
   .summary-card-modal { box-shadow: none; border-radius: 0; max-width: 100%; }

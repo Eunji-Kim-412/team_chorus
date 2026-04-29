@@ -12,3 +12,5 @@ async function request(path, options = {}) {
 
 export const diagnose = (pet_type, symptoms) => request("/api/diagnose", { method: "POST", body: JSON.stringify({ pet_type, symptoms }) });
 export const getHistory = () => request("/api/history");
+export const chat = (llm, messages, system_prompt) => request("/api/chat", { method: "POST", body: JSON.stringify({ llm, messages, system_prompt }) });
+export const diagnoseSummary = (diagnoses) => request("/api/diagnose-summary", { method: "POST", body: JSON.stringify({ diagnoses }) });

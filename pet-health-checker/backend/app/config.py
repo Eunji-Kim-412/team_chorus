@@ -7,7 +7,7 @@ try:
     from dotenv import load_dotenv
     _env_path = Path(__file__).resolve().parent.parent / ".env"
     if _env_path.exists():
-        load_dotenv(_env_path)
+        load_dotenv(_env_path, override=True)
 except ImportError:
     # python-dotenv 미설치 시 건너뜀 (requirements.txt에 포함되어 있음)
     pass
