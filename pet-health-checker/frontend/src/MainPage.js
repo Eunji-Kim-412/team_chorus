@@ -5,6 +5,11 @@ import { diagnose, getHistory } from "./api";
 const MODEL_COLORS = { "Claude (Bedrock)": "#d97706", "GPT (OpenAI)": "#10a37f", "Gemini (Google)": "#4285f4" };
 const PETS_STORAGE_KEY = "pet_health_checker_f1_pets_v1";
 const DAILY_LOGS_STORAGE_KEY = "pet_health_checker_f1_daily_logs_v1";
+const PRESET_PETS = [
+  { id: "preset-ppoppi", name: "뽀삐", species: "dog", breed: "말티즈", age: { years: 3, months: 0 }, gender: "female", neutered: true, weightKg: 4.1 },
+  { id: "preset-choco", name: "초코", species: "dog", breed: "푸들", age: { years: 5, months: 0 }, gender: "male", neutered: true, weightKg: 5.2 },
+  { id: "preset-sugar", name: "설탕이", species: "cat", breed: "코리안숏헤어", age: { years: 8, months: 0 }, gender: "female", neutered: true, weightKg: 3.8 },
+];
 
 const emptyPetForm = {
   id: "",
@@ -41,6 +46,7 @@ export default function MainPage() {
   const [userLocation, setUserLocation] = useState(null);
   const [pets, setPets] = useState([]);
   const [selectedPetId, setSelectedPetId] = useState("");
+  const [llmNotes, setLlmNotes] = useState({ gpt: "", gemini: "", claude: "" });
   const [petForm, setPetForm] = useState(emptyPetForm);
   const [showPetForm, setShowPetForm] = useState(true);
 
@@ -50,13 +56,31 @@ export default function MainPage() {
     try {
       const petRaw = localStorage.getItem(PETS_STORAGE_KEY);
       const loadedPets = petRaw ? JSON.parse(petRaw) : [];
-      setPets(loadedPets);
-      if (loadedPets.length > 0) {
-        setSelectedPetId(loadedPets[0].id);
-        setShowPetForm(false);
-      }
+      const mergedPets = [...loadedPets];
+      PRESET_PETS.forEach((preset) => {
+        if (!mergedPets.some((p) => p.id === preset.id || p.name === preset.name)) {
+          mergedPets.push({
+            ...preset,
+            medicalHistory: [],
+            medications: [],
+            foodType: null,
+            preferredFoodBrand: null,
+            favoriteFoods: [],
+            allergies: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      });
+      setPets(mergedPets);
+      setSelectedPetId("");
+      setPetForm(emptyPetForm);
+      setShowPetForm(true);
     } catch {
-      setPets([]);
+      setPets(PRESET_PETS);
+      setSelectedPetId("");
+      setPetForm(emptyPetForm);
+      setShowPetForm(true);
     }
   }, []);
 
@@ -163,6 +187,25 @@ export default function MainPage() {
     setShowPetForm(false);
   };
 
+  const handleImportFromLlm = (provider) => {
+    const links = {
+      gpt: "https://chat.openai.com",
+      gemini: "https://gemini.google.com",
+      claude: "https://claude.ai",
+    };
+    const promptText =
+      "과거 대화 중 내 반려동물 건강진단에 도움이 될 만한 정보를 요약해서 추출해줘.";
+    window.open(links[provider], "_blank", "noopener,noreferrer");
+    const pasted = window.prompt(
+      `${provider.toUpperCase()} 창에서 아래 요청을 입력 후 결과 요약을 붙여넣어 주세요:\n\n${promptText}`,
+      llmNotes[provider] || ""
+    );
+    if (pasted && pasted.trim()) {
+      setLlmNotes((prev) => ({ ...prev, [provider]: pasted.trim() }));
+      alert(`${provider.toUpperCase()} 요약을 가져왔습니다.`);
+    }
+  };
+
   const handleDiagnose = async (e) => {
     e.preventDefault();
     if (!selectedPet) {
@@ -174,8 +217,13 @@ export default function MainPage() {
     setSummary("");
     setNeedsHospital(false);
     try {
+      const llmSummaryText = Object.entries(llmNotes)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `[${k.toUpperCase()} 요약]\n${v}`)
+        .join("\n\n");
+      const symptomPayload = llmSummaryText ? `${symptoms}\n\n${llmSummaryText}` : symptoms;
       const petContext = { pet: selectedPet };
-      const data = await diagnose(petType, symptoms, petContext);
+      const data = await diagnose(petType, symptomPayload, petContext);
       setResults(data.results);
       setSummary(data.summary || "");
       setNeedsHospital(data.needs_hospital || false);
@@ -210,18 +258,17 @@ export default function MainPage() {
   return (
     <div className="main-container">
       <header>
-        <h1>🐾 Pet Health Tracker</h1>
-        <nav>
-          <button className={tab === "diagnose" ? "active" : ""} onClick={() => setTab("diagnose")}>진단하기</button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>상담 기록</button>
-        </nav>
+        <h1>🐾 펫 건강 체크</h1>
       </header>
 
-      {tab === "diagnose" && (
-        <div className="diagnose-section">
+      <div className="diagnose-section">
           <section className="f1-section">
-            <div className="f1-header-row">
+            <div className="f1-title-block">
               <h2>F1. 펫 정보 등록</h2>
+              <p>보호자가 반려동물 정보를 등록/수정하고, 이 정보로 진단을 시작합니다.</p>
+            </div>
+
+            <div className="f1-control-grid">
               <div className="f1-actions">
                 <select value={selectedPetId} onChange={(e) => setSelectedPetId(e.target.value)}>
                   <option value="">등록된 펫 선택</option>
@@ -238,51 +285,78 @@ export default function MainPage() {
 
             {showPetForm ? (
               <form className="f1-form-grid" onSubmit={savePetInfo}>
-                <input placeholder="이름 *" value={petForm.name} onChange={(e) => updatePetForm("name", e.target.value)} />
-                <select value={petForm.species} onChange={(e) => updatePetForm("species", e.target.value)}>
-                  <option value="dog">강아지</option>
-                  <option value="cat">고양이</option>
-                  <option value="other">기타</option>
-                </select>
-                <input placeholder="품종 *" value={petForm.breed} onChange={(e) => updatePetForm("breed", e.target.value)} />
-                <input type="number" placeholder="나이(년) *" value={petForm.ageYears} onChange={(e) => updatePetForm("ageYears", e.target.value)} />
-                <input type="number" placeholder="개월" value={petForm.ageMonths} onChange={(e) => updatePetForm("ageMonths", e.target.value)} />
-                <select value={petForm.gender} onChange={(e) => updatePetForm("gender", e.target.value)}>
-                  <option value="male">수컷</option>
-                  <option value="female">암컷</option>
-                </select>
-                <select value={petForm.neutered} onChange={(e) => updatePetForm("neutered", e.target.value)}>
-                  <option value="true">중성화 함</option>
-                  <option value="false">중성화 안 함</option>
-                </select>
-                <input type="number" step="0.1" placeholder="몸무게(kg) *" value={petForm.weightKg} onChange={(e) => updatePetForm("weightKg", e.target.value)} />
-                <input placeholder="병력 (쉼표로 구분)" value={petForm.medicalHistory} onChange={(e) => updatePetForm("medicalHistory", e.target.value)} />
-                <input placeholder="상시 복용 약물 (쉼표로 구분)" value={petForm.medications} onChange={(e) => updatePetForm("medications", e.target.value)} />
-                <select value={petForm.foodType} onChange={(e) => updatePetForm("foodType", e.target.value)}>
-                  <option value="">사료 종류</option>
-                  <option value="dry">건식</option>
-                  <option value="wet">습식</option>
-                  <option value="raw">생식</option>
-                  <option value="mixed">혼합</option>
-                </select>
-                <input placeholder="자주 먹는 사료 브랜드" value={petForm.preferredFoodBrand} onChange={(e) => updatePetForm("preferredFoodBrand", e.target.value)} />
-                <input placeholder="좋아하는 음식 (쉼표로 구분)" value={petForm.favoriteFoods} onChange={(e) => updatePetForm("favoriteFoods", e.target.value)} />
-                <input placeholder="알레르기 (쉼표로 구분)" value={petForm.allergies} onChange={(e) => updatePetForm("allergies", e.target.value)} />
-                <input placeholder="전날 먹은 음식" value={petForm.yesterdayFood} onChange={(e) => updatePetForm("yesterdayFood", e.target.value)} />
-                <select value={petForm.stoolType} onChange={(e) => updatePetForm("stoolType", e.target.value)}>
-                  <option value="">용변 형태</option>
-                  <option value="normal">정상</option>
-                  <option value="diarrhea">설사</option>
-                  <option value="constipation">변비</option>
-                  <option value="bloody">혈변</option>
-                </select>
-                <select value={petForm.activityLevel} onChange={(e) => updatePetForm("activityLevel", e.target.value)}>
-                  <option value="">활동량</option>
-                  <option value="normal">평소대로</option>
-                  <option value="decreased">줄어듦</option>
-                  <option value="increased">늘어남</option>
-                </select>
-                <textarea placeholder="자유 메모" value={petForm.notes} onChange={(e) => updatePetForm("notes", e.target.value)} rows={2} />
+                <section className="f1-form-card">
+                  <h3>기본 정보 (필수)</h3>
+                  <div className="species-toggle-row">
+                    <button
+                      type="button"
+                      className={petForm.species === "dog" ? "active" : ""}
+                      onClick={() => updatePetForm("species", "dog")}
+                    >
+                      🐶 강아지
+                    </button>
+                    <button
+                      type="button"
+                      className={petForm.species === "cat" ? "active" : ""}
+                      onClick={() => updatePetForm("species", "cat")}
+                    >
+                      🐱 고양이
+                    </button>
+                  </div>
+                  <div className="f1-card-grid">
+                    <input placeholder="이름 *" value={petForm.name} onChange={(e) => updatePetForm("name", e.target.value)} />
+                    <input placeholder="품종 *" value={petForm.breed} onChange={(e) => updatePetForm("breed", e.target.value)} />
+                    <input type="number" placeholder="나이(년) *" value={petForm.ageYears} onChange={(e) => updatePetForm("ageYears", e.target.value)} />
+                    <select value={petForm.gender} onChange={(e) => updatePetForm("gender", e.target.value)}>
+                      <option value="male">수컷</option>
+                      <option value="female">암컷</option>
+                    </select>
+                    <select value={petForm.neutered} onChange={(e) => updatePetForm("neutered", e.target.value)}>
+                      <option value="true">중성화 함</option>
+                      <option value="false">중성화 안 함</option>
+                    </select>
+                    <input type="number" step="0.1" placeholder="몸무게(kg) *" value={petForm.weightKg} onChange={(e) => updatePetForm("weightKg", e.target.value)} />
+                  </div>
+                </section>
+
+                <section className="f1-form-card">
+                  <h3>건강/식이 정보 (선택)</h3>
+                  <div className="f1-card-grid">
+                    <input placeholder="병력 (쉼표로 구분)" value={petForm.medicalHistory} onChange={(e) => updatePetForm("medicalHistory", e.target.value)} />
+                    <input placeholder="상시 복용 약물 (쉼표로 구분)" value={petForm.medications} onChange={(e) => updatePetForm("medications", e.target.value)} />
+                    <select value={petForm.foodType} onChange={(e) => updatePetForm("foodType", e.target.value)}>
+                      <option value="">사료 종류</option>
+                      <option value="dry">건식</option>
+                      <option value="wet">습식</option>
+                      <option value="raw">생식</option>
+                      <option value="mixed">혼합</option>
+                    </select>
+                    <input placeholder="자주 먹는 사료 브랜드" value={petForm.preferredFoodBrand} onChange={(e) => updatePetForm("preferredFoodBrand", e.target.value)} />
+                    <input placeholder="좋아하는 음식 (쉼표로 구분)" value={petForm.favoriteFoods} onChange={(e) => updatePetForm("favoriteFoods", e.target.value)} />
+                    <input placeholder="알레르기 (쉼표로 구분)" value={petForm.allergies} onChange={(e) => updatePetForm("allergies", e.target.value)} />
+                  </div>
+                </section>
+
+                <section className="f1-form-card">
+                  <h3>일일 컨디션 (선택)</h3>
+                  <div className="f1-card-grid">
+                    <input placeholder="전날 먹은 음식" value={petForm.yesterdayFood} onChange={(e) => updatePetForm("yesterdayFood", e.target.value)} />
+                    <select value={petForm.stoolType} onChange={(e) => updatePetForm("stoolType", e.target.value)}>
+                      <option value="">용변 형태</option>
+                      <option value="normal">정상</option>
+                      <option value="diarrhea">설사</option>
+                      <option value="constipation">변비</option>
+                      <option value="bloody">혈변</option>
+                    </select>
+                    <select value={petForm.activityLevel} onChange={(e) => updatePetForm("activityLevel", e.target.value)}>
+                      <option value="">활동량</option>
+                      <option value="normal">평소대로</option>
+                      <option value="decreased">줄어듦</option>
+                      <option value="increased">늘어남</option>
+                    </select>
+                    <textarea placeholder="자유 메모" value={petForm.notes} onChange={(e) => updatePetForm("notes", e.target.value)} rows={2} />
+                  </div>
+                </section>
                 <button type="submit" className="f1-save-btn">펫 정보 저장</button>
               </form>
             ) : selectedPet ? (
@@ -300,19 +374,18 @@ export default function MainPage() {
             )}
           </section>
 
-          <form onSubmit={handleDiagnose}>
-            <div className="pet-select">
-              <label className={petType === "dog" ? "selected" : ""}>
-                <input type="radio" name="pet" value="dog" onChange={() => setPetType("dog")} checked={petType === "dog"} /> 🐶 강아지
-              </label>
-              <label className={petType === "cat" ? "selected" : ""}>
-                <input type="radio" name="pet" value="cat" onChange={() => setPetType("cat")} checked={petType === "cat"} /> 🐱 고양이
-              </label>
-              <label className={petType === "other" ? "selected" : ""}>
-                <input type="radio" name="pet" value="other" onChange={() => setPetType("other")} checked={petType === "other"} /> 🐾 기타
-              </label>
-            </div>
+          <form onSubmit={handleDiagnose} className="diagnose-form-card">
+            <h3 className="symptom-title">증상 입력하기</h3>
             <textarea placeholder="증상을 자세히 입력해주세요. 예: 식욕이 없고 구토를 하며 기운이 없어요" value={symptoms} onChange={(e) => setSymptoms(e.target.value)} rows={4} required />
+            <section className="llm-history-block">
+              <h3>LLM대화기록에서 펫 히스토리 불러오기 (선택)</h3>
+              <p className="f1-llm-title">나의 LLM에서 펫 정보 불러오기</p>
+              <div className="f1-llm-buttons">
+                <button type="button" onClick={() => handleImportFromLlm("gpt")}>GPT에서 불러오기</button>
+                <button type="button" onClick={() => handleImportFromLlm("gemini")}>Gemini에서 불러오기</button>
+                <button type="button" onClick={() => handleImportFromLlm("claude")}>Claude에서 불러오기</button>
+              </div>
+            </section>
             <button type="submit" disabled={!petType || loading || !selectedPet}>{loading ? "AI 분석 중..." : "진단 요청"}</button>
           </form>
 
@@ -354,8 +427,7 @@ export default function MainPage() {
               )}
             </>
           )}
-        </div>
-      )}
+      </div>
 
       {tab === "history" && (
         <div className="history-section">
