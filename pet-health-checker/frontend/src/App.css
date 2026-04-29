@@ -1,0 +1,72 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f5f5; color: #333; }
+
+/* Auth */
+.auth-container { max-width: 400px; margin: 120px auto; text-align: center; }
+.auth-container h1 { font-size: 2rem; margin-bottom: 8px; }
+.subtitle { color: #666; margin-bottom: 32px; }
+.auth-form { display: flex; flex-direction: column; gap: 12px; }
+.auth-form input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
+.auth-form button { padding: 12px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+.auth-form button:hover { background: #4338ca; }
+.link-btn { background: none; border: none; color: #4f46e5; cursor: pointer; margin-top: 16px; font-size: 0.9rem; }
+.error { color: #dc2626; margin-top: 12px; font-size: 0.9rem; }
+
+/* Main */
+.main-container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; padding-bottom: 16px; border-bottom: 1px solid #ddd; }
+header h1 { font-size: 1.5rem; }
+nav { display: flex; gap: 8px; }
+nav button { padding: 8px 16px; border: 1px solid #ddd; border-radius: 8px; background: #fff; cursor: pointer; font-size: 0.9rem; }
+nav button.active { background: #4f46e5; color: #fff; border-color: #4f46e5; }
+.logout-btn { color: #dc2626 !important; border-color: #dc2626 !important; }
+
+/* Diagnose */
+.pet-select { display: flex; gap: 16px; margin-bottom: 16px; }
+.pet-select label { flex: 1; padding: 16px; border: 2px solid #ddd; border-radius: 12px; text-align: center; cursor: pointer; font-size: 1.1rem; background: #fff; }
+.pet-select label.selected { border-color: #4f46e5; background: #eef2ff; }
+.pet-select input { display: none; }
+textarea { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; resize: vertical; }
+.diagnose-section button[type="submit"] { margin-top: 12px; width: 100%; padding: 14px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; }
+.diagnose-section button:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+/* Loading */
+.loading { text-align: center; padding: 40px; }
+.spinner { width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #4f46e5; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Results */
+.results-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+.result-card { background: #fff; border-radius: 12px; padding: 20px; border-top: 4px solid; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow-wrap: break-word; }
+.result-card h3 { margin-bottom: 12px; font-size: 1rem; }
+.result-card p, .result-card li { font-size: 0.9rem; line-height: 1.6; }
+
+/* History */
+.history-list { list-style: none; }
+.history-list li { display: flex; align-items: center; gap: 12px; padding: 16px; background: #fff; border-radius: 8px; margin-bottom: 8px; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+.history-list li:hover { background: #f9fafb; }
+.symptoms-preview { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.date { color: #888; font-size: 0.85rem; }
+.back-btn { background: none; border: none; color: #4f46e5; cursor: pointer; font-size: 1rem; margin-bottom: 16px; }
+
+/* Summary */
+.summary-section { margin-top: 32px; }
+.summary-section h2 { font-size: 1.3rem; margin-bottom: 16px; }
+.summary-card { background: #fff; border-radius: 12px; padding: 24px; border-left: 5px solid #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+.summary-card p, .summary-card li { font-size: 0.95rem; line-height: 1.7; }
+
+/* Hospital */
+.hospital-section { margin-top: 20px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 12px; padding: 20px; text-align: center; }
+.hospital-section h3 { color: #dc2626; margin-bottom: 8px; }
+.hospital-section p { color: #7f1d1d; margin-bottom: 16px; font-size: 0.95rem; }
+.hospital-btn { display: inline-block; padding: 14px 28px; background: #2db400; color: #fff; text-decoration: none; border-radius: 8px; font-size: 1.05rem; font-weight: 600; }
+.hospital-btn:hover { background: #259a00; }
+
+/* Safe */
+.safe-section { margin-top: 20px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 12px; padding: 20px; text-align: center; }
+.safe-section h3 { color: #16a34a; margin-bottom: 8px; }
+.safe-section p { color: #14532d; font-size: 0.95rem; }
+
+@media (max-width: 768px) {
+  .results-grid { grid-template-columns: 1fr; }
+}

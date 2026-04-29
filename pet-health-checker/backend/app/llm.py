@@ -1,0 +1,155 @@
+import asyncio
+import json
+import openai
+from google import genai
+from app.config import (
+    CLAUDE_PROVIDER,
+    ANTHROPIC_API_KEY, ANTHROPIC_MODEL_ID,
+    AWS_REGION, BEDROCK_MODEL_ID,
+    OPENAI_API_KEY, OPENAI_MODEL_ID,
+    GEMINI_API_KEY, GEMINI_MODEL_ID,
+)
+
+# 선택적 의존성 (프로바이더에 따라 필요한 라이브러리만 사용)
+if CLAUDE_PROVIDER == "anthropic":
+    import anthropic
+else:
+    import boto3
+
+SYSTEM_PROMPT = (
+    "You are a veterinary AI assistant. Based on the pet type and symptoms provided, "
+    "give the top 3 most likely diseases/conditions. For each, provide:\n"
+    "1. Disease name (in Korean and English)\n"
+    "2. Brief description\n"
+    "3. Severity (낮음/보통/높음)\n"
+    "4. Recommended action\n\n"
+    "Always end with: '⚠️ 이 결과는 참고용이며, 반드시 수의사와 상담하세요.'\n"
+    "Respond entirely in Korean."
+)
+
+SUMMARY_PROMPT = (
+    "You are a veterinary AI assistant. Below are diagnoses from multiple AI models for the same pet symptoms. "
+    "Synthesize them into one final, best diagnosis. Include:\n"
+    "1. 종합 진단 결과 (가장 가능성 높은 질병 순위)\n"
+    "2. 각 질병의 심각도와 설명\n"
+    "3. 즉시 병원 방문이 필요한지 여부 (needs_hospital: true/false)\n"
+    "4. 보호자가 당장 할 수 있는 응급 조치\n\n"
+    "Format the response as follows - start with a JSON line, then the detailed explanation:\n"
+    '첫 줄: {"needs_hospital": true or false}\n'
+    "그 다음: 상세 종합 진단 내용\n\n"
+    "Always end with: '⚠️ 이 결과는 참고용이며, 반드시 수의사와 상담하세요.'\n"
+    "Respond entirely in Korean."
+)
+
+
+def _build_user_msg(pet_type: str, symptoms: str) -> str:
+    label = "강아지" if pet_type == "dog" else "고양이"
+    return f"반려동물 종류: {label}\n증상: {symptoms}"
+
+
+# ===== Claude 호출 (프로바이더 자동 선택) =====
+
+async def _call_claude_anthropic(system: str, user_msg: str, max_tokens: int) -> str:
+    client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    resp = await client.messages.create(
+        model=ANTHROPIC_MODEL_ID,
+        max_tokens=max_tokens,
+        system=system,
+        messages=[{"role": "user", "content": user_msg}],
+    )
+    return resp.content[0].text
+
+
+async def _call_claude_bedrock(system: str, user_msg: str, max_tokens: int) -> str:
+    def _invoke():
+        client = boto3.client("bedrock-runtime", region_name=AWS_REGION)
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "system": system,
+            "messages": [{"role": "user", "content": user_msg}],
+        })
+        resp = client.invoke_model(modelId=BEDROCK_MODEL_ID, body=body, contentType="application/json")
+        return json.loads(resp["body"].read())["content"][0]["text"]
+    return await asyncio.to_thread(_invoke)
+
+
+async def _call_claude(system: str, user_msg: str, max_tokens: int) -> str:
+    if CLAUDE_PROVIDER == "anthropic":
+        return await _call_claude_anthropic(system, user_msg, max_tokens)
+    return await _call_claude_bedrock(system, user_msg, max_tokens)
+
+
+async def call_claude(pet_type: str, symptoms: str) -> str:
+    return await _call_claude(SYSTEM_PROMPT, _build_user_msg(pet_type, symptoms), 1024)
+
+
+# ===== GPT / Gemini =====
+
+async def call_gpt(pet_type: str, symptoms: str) -> str:
+    client = openai.AsyncOpenAI(api_key=OPENAI_API_KEY)
+    resp = await client.chat.completions.create(
+        model=OPENAI_MODEL_ID,
+        max_tokens=1024,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _build_user_msg(pet_type, symptoms)},
+        ],
+    )
+    return resp.choices[0].message.content
+
+
+async def call_gemini(pet_type: str, symptoms: str) -> str:
+    def _invoke():
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL_ID,
+            contents=f"{SYSTEM_PROMPT}\n\n{_build_user_msg(pet_type, symptoms)}",
+        )
+        return resp.text
+    return await asyncio.to_thread(_invoke)
+
+
+# ===== 종합 요약 =====
+
+async def summarize_results(pet_type: str, symptoms: str, results: list[dict]) -> dict:
+    valid = [r for r in results if not r.get("error")]
+    if not valid:
+        return {"summary": "유효한 진단 결과가 없어 종합 분석을 수행할 수 없습니다.", "needs_hospital": False}
+
+    combined = "\n\n".join([f"[{r['model']}]\n{r['diagnosis']}" for r in valid])
+    label = "강아지" if pet_type == "dog" else "고양이"
+    user_msg = f"반려동물: {label}\n증상: {symptoms}\n\n--- 각 모델 진단 결과 ---\n{combined}"
+
+    try:
+        text = await _call_claude(SUMMARY_PROMPT, user_msg, 1500)
+        needs_hospital = False
+        first_line = text.split("\n")[0].strip()
+        try:
+            meta = json.loads(first_line)
+            needs_hospital = meta.get("needs_hospital", False)
+            text = "\n".join(text.split("\n")[1:]).strip()
+        except (json.JSONDecodeError, IndexError):
+            needs_hospital = "병원" in text and ("즉시" in text or "필요" in text or "방문" in text)
+        return {"summary": text, "needs_hospital": needs_hospital}
+    except Exception as e:
+        return {"summary": f"종합 분석 중 오류: {str(e)}", "needs_hospital": False}
+
+
+async def _safe_call(name: str, fn, pet_type: str, symptoms: str) -> dict:
+    try:
+        text = await fn(pet_type, symptoms)
+        return {"model": name, "diagnosis": text, "error": None}
+    except Exception as e:
+        return {"model": name, "diagnosis": "", "error": str(e)}
+
+
+async def diagnose_all(pet_type: str, symptoms: str) -> list[dict]:
+    claude_label = "Claude (Anthropic)" if CLAUDE_PROVIDER == "anthropic" else "Claude (Bedrock)"
+    tasks = [
+        (claude_label, call_claude),
+        ("GPT (OpenAI)", call_gpt),
+        ("Gemini (Google)", call_gemini),
+    ]
+    coros = [_safe_call(name, fn, pet_type, symptoms) for name, fn in tasks]
+    return await asyncio.gather(*coros)
