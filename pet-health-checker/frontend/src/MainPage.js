@@ -3,6 +3,7 @@ import ReactMarkdown from "react-markdown";
 import { diagnose, getHistory } from "./api";
 import HospitalSection from "./HospitalSection";
 import SymptomSummaryCard from "./SymptomSummaryCard";
+import HomecareGuide from "./HomecareGuide";
 
 const MODEL_COLORS = { "Claude (Bedrock)": "#d97706", "GPT (OpenAI)": "#10a37f", "Gemini (Google)": "#4285f4" };
 
@@ -42,6 +43,7 @@ export default function MainPage() {
   const [showSummaryCard, setShowSummaryCard] = useState(false);
   const [diagnosisTime, setDiagnosisTime] = useState(null);
   const [fetchError, setFetchError] = useState("");
+  const [showHomecareGuide, setShowHomecareGuide] = useState(false);
 
   const applyDiagnosisData = (data) => {
     setResults(data.results);
@@ -119,9 +121,12 @@ export default function MainPage() {
             <button type="submit" disabled={!petType || loading}>{loading ? "AI 분석 중..." : "진단 요청"}</button>
           </form>
 
-          <div style={{ marginTop: 8, textAlign: "center" }}>
+          <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
             <button type="button" onClick={handleMockTest} style={{ background: "none", border: "1px dashed #a5b4fc", color: "#4f46e5", borderRadius: 6, padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" }}>
               🧪 F5 테스트 결과 보기
+            </button>
+            <button type="button" onClick={() => setShowHomecareGuide(true)} style={{ background: "none", border: "1px dashed #86efac", color: "#16a34a", borderRadius: 6, padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" }}>
+              🏠 F4 홈케어 가이드 테스트
             </button>
           </div>
 
@@ -159,7 +164,13 @@ export default function MainPage() {
                   ) : (
                     <div className="safe-section">
                       <h3>😊 안심하세요!</h3>
-                      <p>현재 증상은 심각한 수준은 아닌 것으로 보입니다. 가정에서 경과를 관찰해주시고, 증상이 지속되거나 악화되면 수의사와 상담하세요.</p>
+                      <p>현재 증상은 심각한 수준은 아닌 것으로 보입니다. 아래 홈케어 가이드를 확인하고 가정에서 경과를 관찰해주세요.</p>
+                      <button
+                        style={{ marginTop: 14, padding: "12px 24px", background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, fontSize: "1rem", fontWeight: 600, cursor: "pointer" }}
+                        onClick={() => setShowHomecareGuide(true)}
+                      >
+                        🏠 홈케어 가이드 보기
+                      </button>
                     </div>
                   )}
                 </div>
@@ -212,6 +223,24 @@ export default function MainPage() {
           timestamp={diagnosisTime}
           onClose={() => setShowSummaryCard(false)}
         />
+      )}
+      {showHomecareGuide && (
+        <div className="modal-overlay">
+          <div style={{ width: "100%", maxWidth: 680 }}>
+            <button
+              className="back-btn"
+              style={{ marginBottom: 12, background: "#fff", border: "1px solid #ddd", borderRadius: 8, padding: "8px 16px" }}
+              onClick={() => setShowHomecareGuide(false)}
+            >
+              ← 진단 결과로 돌아가기
+            </button>
+            <HomecareGuide
+              diagnosisResult={null}
+              onBackToDiagnose={() => { setShowHomecareGuide(false); setResults([]); setSummary(""); }}
+              onGoToHospital={() => { setShowHomecareGuide(false); setNeedsHospital(true); }}
+            />
+          </div>
+        </div>
       )}
     </div>
   );
