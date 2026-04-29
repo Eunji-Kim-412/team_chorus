@@ -13,14 +13,22 @@ def startup():
 
 @app.post("/api/diagnose")
 async def diagnose(req: DiagnoseRequest):
-    results = await diagnose_all(req.pet_type, req.symptoms)
-    summary_data = await summarize_results(req.pet_type, req.symptoms, results)
+    pet_type = req.pet_type
+    pet_id = None
+    pet_context_json = None
+    if req.pet_context:
+        pet_type = req.pet_context.pet.species
+        pet_id = req.pet_context.pet.id
+        pet_context_json = req.pet_context.model_dump_json()
+
+    results = await diagnose_all(pet_type, req.symptoms)
+    summary_data = await summarize_results(pet_type, req.symptoms, results)
     r_map = {r["model"]: r for r in results}
     db = get_db_conn()
     try:
         db.execute(
-            "INSERT INTO consultations (user_id, pet_type, symptoms, result_claude, result_gpt, result_gemini) VALUES (?,?,?,?,?,?)",
-            (1, req.pet_type, req.symptoms,
+            "INSERT INTO consultations (user_id, pet_type, symptoms, pet_id, pet_context_json, result_claude, result_gpt, result_gemini) VALUES (?,?,?,?,?,?,?,?)",
+            (1, pet_type, req.symptoms, pet_id, pet_context_json,
              r_map.get("Claude (Bedrock)", {}).get("diagnosis", ""),
              r_map.get("GPT (OpenAI)", {}).get("diagnosis", ""),
              r_map.get("Gemini (Google)", {}).get("diagnosis", "")),

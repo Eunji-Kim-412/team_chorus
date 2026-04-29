@@ -113,6 +113,12 @@ interface PetContext {
 - 새로고침 후에도 등록한 펫이 유지된다.
 - 진단 시작 직전에 정보 요약 카드가 모든 등록 필드를 노출한다.
 
+#### 현재 베이스 코드 반영 사항 (효지, 2026-04-29)
+- 프론트(`frontend/src/MainPage.js`)에 F1 등록/수정/다중 펫 선택 UI를 추가하고, 저장 데이터는 로컬 스토리지(`pet_health_checker_f1_pets_v1`, `pet_health_checker_f1_daily_logs_v1`)에 보관한다.
+- 등록 후 요약 카드에서 `"이 정보로 시작"`으로 F2 진입 전 선택 펫 컨텍스트를 확정한다.
+- 백엔드 `models.py`에 `Pet`, `DailyLog`, `PetContext` 타입을 추가하고, `/api/diagnose` 요청에 `pet_context`를 포함할 수 있도록 확장했다.
+- 백엔드 `database.py`에 `pets`, `daily_logs` 테이블과 `consultations.pet_id`, `consultations.pet_context_json` 컬럼을 반영해 F1→F2 인터페이스 저장 경로를 준비했다.
+
 ---
 
 ### F2. 증상 대화형 입력 + 3개 LLM 병렬 호출
