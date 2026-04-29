@@ -235,7 +235,11 @@ export default function MainPage() {
               ← 진단 결과로 돌아가기
             </button>
             <HomecareGuide
-              diagnosisResult={null}
+              diagnosisResult={{
+                petContext: { pet: { name: "콩이", species: "dog", breed: "포메라니안", age: { years: 5, months: 0 }, medicalHistory: [] } },
+                consolidatedUrgency: 2.8,
+                consolidatedDiagnoses: [{ name: "식체 (과식으로 인한 소화 장애)" }],
+              }}
               onBackToDiagnose={() => { setShowHomecareGuide(false); setResults([]); setSummary(""); }}
               onGoToHospital={() => { setShowHomecareGuide(false); setNeedsHospital(true); }}
             />
