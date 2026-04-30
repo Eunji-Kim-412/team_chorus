@@ -1,86 +1,140 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 import { diagnose, getHistory } from "./api";
 import HospitalSection from "./HospitalSection";
 import SymptomSummaryCard from "./SymptomSummaryCard";
+import SymptomChat from "./SymptomChat";
+import PetProfileSection from "./PetProfileSection";
 
-const MODEL_COLORS = { "Claude (Bedrock)": "#d97706", "GPT (OpenAI)": "#10a37f", "Gemini (Google)": "#4285f4" };
-
-const MOCK_RESULT = {
-  needs_hospital: true,
-  summary: "반복적인 구토와 식욕 저하가 있어 오늘 중 동물병원 방문을 권장합니다.",
-  results: [
-    {
-      model: "Claude (Bedrock)",
-      diagnosis: "**의심 진단:** 급성 위장염 또는 이물질 섭취\n\n반복적인 구토와 식욕 저하는 위장관 자극 또는 이물질에 의한 폐색 가능성을 시사합니다. 탈수 증상 여부를 확인하고 오늘 중 수의사 진료를 받으세요.\n\n- 위험도: **8.0 / 10**\n- Red flags: 혈변, 12시간 이상 지속 구토",
-      error: null,
-    },
-    {
-      model: "GPT (OpenAI)",
-      diagnosis: "**의심 진단:** 위장관 장애 (위염 또는 장염)\n\n증상 패턴상 위염 또는 장염이 가장 유력합니다. 음수 거부가 동반된다면 탈수 위험이 높으므로 즉시 병원을 방문하세요.\n\n- 위험도: **7.5 / 10**\n- Red flags: 무기력증, 지속적 식욕 부진",
-      error: null,
-    },
-    {
-      model: "Gemini (Google)",
-      diagnosis: "**의심 진단:** 급성 위염 또는 췌장염\n\n구토 반복과 식욕 저하의 조합은 췌장염 가능성도 배제할 수 없습니다. 지방이 많은 음식 섭취 이력이 있다면 더욱 주의가 필요합니다.\n\n- 위험도: **8.2 / 10**\n- Red flags: 복부 팽만, 황달",
-      error: null,
-    },
-  ],
+const MODEL_COLORS = {
+  "Claude (Bedrock)": "#d97706",
+  "Claude (Anthropic)": "#d97706",
+  "GPT (OpenAI)": "#10a37f",
+  "GPT-OSS (Bedrock)": "#10a37f",
+  "GPT (미설정)": "#9ca3af",
+  "Gemini (Google)": "#4285f4",
 };
+
+// 화면 표시용 라벨 (플랫폼명 제거)
+function displayModelName(fullName) {
+  if (!fullName) return fullName;
+  // "모델명 (플랫폼)" 패턴에서 괄호 앞부분만 추출
+  return fullName.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+const URGENCY_ICONS = { 1: "🟢", 2: "🟡", 3: "🟠", 4: "🔴", 5: "🚨" };
+
+// 위험도 스케일 범례 (사용자 설명용)
+const URGENCY_SCALE = [
+  { range: "1 – 2.9", label: "거의 정상", color: "green", icon: "🟢", action: "집에서 관찰" },
+  { range: "3 – 4.9", label: "가벼운 이상", color: "lime", icon: "🟡", action: "홈케어" },
+  { range: "5 – 6.9", label: "주의 필요", color: "yellow", icon: "🟠", action: "내일 병원" },
+  { range: "7 – 8.9", label: "응급", color: "orange", icon: "🔴", action: "오늘 병원" },
+  { range: "9 – 10", label: "즉시 응급", color: "red", icon: "🚨", action: "24시간 응급실" },
+];
+
+function UrgencyBar({ score }) {
+  const pct = Math.max(0, Math.min(100, (score / 10) * 100));
+  return (
+    <div className="urgency-bar-small">
+      <div className="urgency-bar-small-fill" style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+function StatusPill({ status }) {
+  const map = {
+    success: { label: "✓ 완료", cls: "pill-ok" },
+    schema_violation: { label: "⚠ 형식 오류", cls: "pill-warn" },
+    failed: { label: "✗ 실패", cls: "pill-fail" },
+    timeout: { label: "⏱ 시간 초과", cls: "pill-fail" },
+  };
+  const info = map[status] || { label: status, cls: "pill-warn" };
+  return <span className={`status-pill ${info.cls}`}>{info.label}</span>;
+}
 
 export default function MainPage() {
   const [petType, setPetType] = useState("");
   const [symptoms, setSymptoms] = useState("");
-  const [results, setResults] = useState([]);
-  const [summary, setSummary] = useState("");
-  const [needsHospital, setNeedsHospital] = useState(false);
+  const [llmResponses, setLlmResponses] = useState([]);
+  const [consolidated, setConsolidated] = useState(null);
+  const [totalLatency, setTotalLatency] = useState(0);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("diagnose");
   const [history, setHistory] = useState([]);
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [userLocation, setUserLocation] = useState(null);
+  const [showDetails, setShowDetails] = useState(false);
   const [showSummaryCard, setShowSummaryCard] = useState(false);
-  const [diagnosisTime, setDiagnosisTime] = useState(null);
-  const [fetchError, setFetchError] = useState("");
+  const [diagnosisTimestamp, setDiagnosisTimestamp] = useState(null);
+  const [petContext, setPetContext] = useState(null); // F1: 선택된 펫 정보
 
-  const applyDiagnosisData = (data) => {
-    setResults(data.results);
-    setSummary(data.summary || "");
-    setNeedsHospital(data.needs_hospital || false);
-    setDiagnosisTime(new Date());
-    if (data.needs_hospital) {
-      navigator.geolocation?.getCurrentPosition(
-        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => setUserLocation(null)
-      );
+  // PetProfileSection의 onPetContextChange가 리렌더마다 재생성되지 않도록
+  const handlePetContextChange = useCallback((ctx) => {
+    setPetContext(ctx);
+    if (ctx?.pet?.species) {
+      setPetType(ctx.pet.species);
     }
-  };
+  }, []);
 
-  const handleDiagnose = async (e) => {
-    e.preventDefault();
+  const handleDiagnose = async (messages, collectedAnswers) => {
+    // 펫 선택 안 됐으면 가드
+    if (!petContext) {
+      alert("먼저 반려동물 정보를 등록하거나 선택해주세요.");
+      return;
+    }
+
+    const compactSymptoms = buildCompactSymptoms(collectedAnswers, messages);
+    setSymptoms(compactSymptoms);
+
     setLoading(true);
-    setResults([]);
-    setSummary("");
-    setNeedsHospital(false);
-    setFetchError("");
+    setLlmResponses([]);
+    setConsolidated(null);
+    setShowDetails(false);
     try {
-      const data = await diagnose(petType, symptoms);
-      applyDiagnosisData(data);
+      const data = await diagnose(petContext.pet.species, compactSymptoms, {
+        messages,
+        pet_context: petContext,
+      });
+      setLlmResponses(data.llmResponses || []);
+      setConsolidated(data.consolidated || null);
+      setTotalLatency(data.totalLatencyMs || 0);
+      setDiagnosisTimestamp(new Date().toISOString());
+      if (data.consolidated?.shouldVisitHospital) {
+        navigator.geolocation?.getCurrentPosition(
+          (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+          () => setUserLocation(null)
+        );
+      }
     } catch (err) {
-      setFetchError(err.message || "서버에 연결할 수 없습니다. 백엔드가 실행 중인지 확인해주세요.");
+      alert(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMockTest = () => {
-    setFetchError("");
-    setResults([]);
-    setSummary("");
-    setNeedsHospital(false);
-    if (!petType) setPetType("dog");
-    if (!symptoms) setSymptoms("어제부터 구토를 3번 했고, 사료를 전혀 먹지 않으려 합니다. 기운도 없어 보여요.");
-    applyDiagnosisData(MOCK_RESULT);
+  // 대화 내용 → 증상 요약 문자열 (백엔드 호환용)
+  const buildCompactSymptoms = (answers, messages) => {
+    if (answers && Object.keys(answers).length > 0) {
+      const parts = [];
+      if (answers.main_symptom) parts.push(`주요 증상: ${answers.main_symptom}`);
+      if (answers.onset) parts.push(`시작 시점: ${answers.onset}`);
+      if (answers.frequency) parts.push(`빈도: ${answers.frequency}`);
+      if (answers.co_symptoms) parts.push(`동반 증상: ${answers.co_symptoms}`);
+      if (answers.behavior) parts.push(`행동 변화: ${answers.behavior}`);
+      return parts.join("\n");
+    }
+    // 폴백: user 메시지만 합침
+    return messages
+      .filter((m) => m.role === "user")
+      .map((m) => m.content)
+      .join(" / ");
+  };
+
+  const handleRetry = () => {
+    // 재진단 — 증상 수정 가능하도록 결과만 클리어
+    setLlmResponses([]);
+    setConsolidated(null);
   };
 
   const loadHistory = async () => {
@@ -92,80 +146,268 @@ export default function MainPage() {
     }
   };
 
-  useEffect(() => { if (tab === "history") loadHistory(); }, [tab]);
+  useEffect(() => {
+    if (tab === "history") loadHistory();
+  }, [tab]);
+
+  const naverMapUrl = userLocation
+    ? `https://map.naver.com/v5/search/동물병원?c=${userLocation.lng},${userLocation.lat},15,0,0,0,dh`
+    : "https://map.naver.com/v5/search/내주변%20동물병원";
+
+  const u = consolidated?.urgency;
+  const successCount = llmResponses.filter((r) => r.status === "success").length;
 
   return (
     <div className="main-container">
       <header>
         <h1>🐾 펫 건강 체커</h1>
         <nav>
-          <button className={tab === "diagnose" ? "active" : ""} onClick={() => setTab("diagnose")}>진단하기</button>
-          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>상담 기록</button>
+          <button className={tab === "diagnose" ? "active" : ""} onClick={() => setTab("diagnose")}>
+            진단하기
+          </button>
+          <button className={tab === "pets" ? "active" : ""} onClick={() => setTab("pets")}>
+            내 반려동물
+          </button>
+          <button className={tab === "history" ? "active" : ""} onClick={() => setTab("history")}>
+            상담 기록
+          </button>
         </nav>
       </header>
 
       {tab === "diagnose" && (
         <div className="diagnose-section">
-          <form onSubmit={handleDiagnose}>
-            <div className="pet-select">
-              <label className={petType === "dog" ? "selected" : ""}>
-                <input type="radio" name="pet" value="dog" onChange={() => setPetType("dog")} checked={petType === "dog"} /> 🐶 강아지
-              </label>
-              <label className={petType === "cat" ? "selected" : ""}>
-                <input type="radio" name="pet" value="cat" onChange={() => setPetType("cat")} checked={petType === "cat"} /> 🐱 고양이
-              </label>
-            </div>
-            <textarea placeholder="증상을 자세히 입력해주세요. 예: 식욕이 없고 구토를 하며 기운이 없어요" value={symptoms} onChange={(e) => setSymptoms(e.target.value)} rows={4} required />
-            <button type="submit" disabled={!petType || loading}>{loading ? "AI 분석 중..." : "진단 요청"}</button>
-          </form>
+          {/* F1: 펫 선택 (간단 버전) */}
+          <PetProfileSection
+            mode="selector"
+            onPetContextChange={handlePetContextChange}
+            onGoToManager={() => setTab("pets")}
+          />
 
-          <div style={{ marginTop: 8, textAlign: "center" }}>
-            <button type="button" onClick={handleMockTest} style={{ background: "none", border: "1px dashed #a5b4fc", color: "#4f46e5", borderRadius: 6, padding: "6px 14px", fontSize: "0.85rem", cursor: "pointer" }}>
-              🧪 F5 테스트 결과 보기
-            </button>
-          </div>
+          {/* F2: 3-phase 멀티턴 LLM 선택 대화 (펫이 선택된 경우에만) */}
+          {petContext ? (
+            <SymptomChat
+              onSubmit={(msgs, answers) => handleDiagnose(msgs, answers)}
+              onReset={() => {
+                setLlmResponses([]);
+                setConsolidated(null);
+              }}
+              petContext={petContext}
+              selectedPetType={petContext.pet.species}
+              petName={petContext.pet.name}
+              disabled={loading}
+            />
+          ) : null}
 
-          {fetchError && (
-            <div style={{ marginTop: 12, padding: "10px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, color: "#dc2626", fontSize: "0.9rem" }}>
-              ⚠️ {fetchError}
+          {loading && (
+            <div className="loading">
+              <div className="spinner" />
+              <p>Claude · GPT · Gemini 세 개 AI가 동시에 분석 중입니다...</p>
             </div>
           )}
 
-          {loading && <div className="loading"><div className="spinner" /><p>AI 모델이 분석 중입니다...</p></div>}
-
-          {results.length > 0 && (
-            <>
-              <div className="results-grid">
-                {results.map((r) => (
-                  <div key={r.model} className="result-card" style={{ borderTopColor: MODEL_COLORS[r.model] || "#888" }}>
-                    <h3 style={{ color: MODEL_COLORS[r.model] || "#888" }}>{r.model}</h3>
-                    {r.error ? <p className="error">오류: {r.error}</p> : <ReactMarkdown>{r.diagnosis}</ReactMarkdown>}
+          {/* ======= F3 결과 화면 ======= */}
+          {consolidated && (
+            <div className="result-container">
+              {/* 헤드라인: 통합 위험도 */}
+              {u && (
+                <div className={`urgency-badge urgency-${u.color}`}>
+                  <div className="urgency-header">
+                    <span className="urgency-icon">{URGENCY_ICONS[u.level] || "⚪"}</span>
+                    <div className="urgency-titles">
+                      <div className="urgency-level-name">
+                        등급 {u.level}단계 · {u.label}
+                      </div>
+                      <div className="urgency-score">
+                        통합 위험도 <strong>{u.score}</strong> / 10
+                      </div>
+                    </div>
                   </div>
-                ))}
+                  <div className="urgency-bar">
+                    <div
+                      className="urgency-bar-fill"
+                      style={{ width: `${(u.score / 10) * 100}%` }}
+                    />
+                  </div>
+                  <p className="urgency-message">{consolidated.headlineMessage}</p>
+                </div>
+              )}
+
+              {/* 모델별 위험도 비교 (SPEC의 투명성 요구) */}
+              <div className="model-scores-card">
+                <h3>🤖 AI 모델별 위험도 ({successCount}/3 성공 · {totalLatency}ms)</h3>
+
+                {/* 위험도 스케일 설명 */}
+                <div className="urgency-scale-help">
+                  <p className="scale-intro">
+                    위험도는 <strong>1(안전)</strong>에서 <strong>10(즉시 응급)</strong> 사이의 점수입니다.
+                    AI들이 증상을 분석해 이 점수를 매겼어요.
+                  </p>
+                  <div className="scale-legend">
+                    {URGENCY_SCALE.map((s) => (
+                      <div key={s.range} className={`scale-item scale-${s.color}`}>
+                        <span className="scale-icon">{s.icon}</span>
+                        <div className="scale-text">
+                          <div className="scale-range">{s.range}</div>
+                          <div className="scale-label">{s.label}</div>
+                          <div className="scale-action">{s.action}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="model-scores-list">
+                  {llmResponses.map((r) => {
+                    const score = r.parsedResponse?.urgency_score;
+                    // 해당 모델의 등급 찾기 (modelRationales에서)
+                    const rationale = consolidated?.modelRationales?.find(
+                      (m) => m.model === r.modelName
+                    );
+                    const level = rationale?.urgency_level;
+                    return (
+                      <div key={r.modelName} className="model-score-row">
+                        <span
+                          className="model-name"
+                          style={{ color: MODEL_COLORS[r.modelName] || "#666" }}
+                        >
+                          {displayModelName(r.modelName)}
+                        </span>
+                        {score != null ? (
+                          <>
+                            <UrgencyBar score={score} />
+                            <div className="model-score-info">
+                              <span className="model-score-num">{score.toFixed(1)}</span>
+                              {level && (
+                                <span className={`model-level-pill level-${level.color}`}>
+                                  {URGENCY_ICONS[level.level]} {level.label}
+                                </span>
+                              )}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="model-score-error">
+                            <StatusPill status={r.status} />
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              {summary && (
-                <div className="summary-section">
-                  <h2>📋 종합 진단 결과</h2>
-                  <div className="summary-card">
-                    <ReactMarkdown>{summary}</ReactMarkdown>
-                  </div>
+              {/* 종합 자연어 요약 */}
+              {consolidated.narrativeSummary && (
+                <div className="narrative-summary-card">
+                  <h3>📝 종합 요약</h3>
+                  <ReactMarkdown>{consolidated.narrativeSummary}</ReactMarkdown>
+                </div>
+              )}
 
-                  {needsHospital ? (
-                    <HospitalSection
-                      userLocation={userLocation}
-                      onShowCard={() => setShowSummaryCard(true)}
-                    />
+              {/* 통합 진단명 */}
+              {consolidated.consolidatedDiagnoses?.length > 0 && (
+                <div className="diagnosis-card">
+                  <h3>
+                    🩺 진단 결과{" "}
+                    {consolidated.consensusType === "agreed" ? (
+                      <span className="consensus-pill agreed">AI 의견 일치</span>
+                    ) : (
+                      <span className="consensus-pill split">AI 의견 분기</span>
+                    )}
+                  </h3>
+                  {consolidated.consensusType === "agreed" ? (
+                    <p className="diagnosis-main">
+                      {consolidated.consolidatedDiagnoses[0]?.name}
+                    </p>
                   ) : (
-                    <div className="safe-section">
-                      <h3>😊 안심하세요!</h3>
-                      <p>현재 증상은 심각한 수준은 아닌 것으로 보입니다. 가정에서 경과를 관찰해주시고, 증상이 지속되거나 악화되면 수의사와 상담하세요.</p>
+                    <div>
+                      <p className="consensus-note">AI마다 의견이 달라 모두 보여드립니다:</p>
+                      <ul className="diagnosis-list">
+                        {consolidated.modelRationales.map((m) => (
+                          <li key={m.model}>
+                            <strong style={{ color: MODEL_COLORS[m.model] }}>{displayModelName(m.model)}</strong>:{" "}
+                            {m.top_diagnosis || "(진단 없음)"}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {consolidated.redFlags?.length > 0 && (
+                    <div className="red-flags">
+                      <h4>⚠️ 주의해야 할 신호</h4>
+                      <ul>
+                        {consolidated.redFlags.map((f, i) => (
+                          <li key={i}>{f}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
               )}
-            </>
+
+              {/* 접힘: 모델별 상세 근거 */}
+              <button
+                className="details-toggle"
+                onClick={() => setShowDetails((v) => !v)}
+              >
+                {showDetails ? "▲ AI들의 의견 접기" : "▼ AI들의 의견 자세히 보기"}
+              </button>
+              {showDetails && (
+                <div className="model-details">
+                  {consolidated.modelRationales.map((m) => (
+                    <div key={m.model} className="model-detail-card">
+                      <h4 style={{ color: MODEL_COLORS[m.model] }}>{displayModelName(m.model)}</h4>
+                      <p className="detail-meta">
+                        위험도 {m.urgency_score} · {m.latencyMs}ms
+                      </p>
+                      <p>
+                        <strong>진단:</strong> {m.top_diagnosis || "(없음)"}
+                      </p>
+                      <p>
+                        <strong>근거:</strong> {m.reasoning || "(없음)"}
+                      </p>
+                      <p>
+                        <strong>위험도 판단:</strong> {m.urgency_rationale}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 분기 CTA */}
+              {consolidated.shouldVisitHospital ? (
+                <HospitalSection
+                  userLocation={userLocation}
+                  urgencyScore={u?.score}
+                  onShowCard={() => setShowSummaryCard(true)}
+                />
+              ) : (
+                <div className="safe-section">
+                  <h3>😊 집에서 관찰 가능합니다</h3>
+                  <p>
+                    현재 증상은 홈케어 가능한 수준으로 보입니다. 충분한 휴식과 수분을 제공해
+                    주시고, 상태가 악화되면 즉시 병원을 방문하세요.
+                  </p>
+                </div>
+              )}
+
+              {/* 재진단 버튼 */}
+              <button className="retry-btn" onClick={handleRetry}>
+                ↻ 이 진단이 맞지 않아요 (다시 설명할게)
+              </button>
+
+              <p className="disclaimer">
+                ⚠️ 본 결과는 참고용이며, 수의학적 진단을 대체하지 않습니다. 반드시 수의사와
+                상담하세요.
+              </p>
+            </div>
           )}
+        </div>
+      )}
+
+      {tab === "pets" && (
+        <div className="pets-section">
+          <PetProfileSection mode="manager" />
         </div>
       )}
 
@@ -173,18 +415,30 @@ export default function MainPage() {
         <div className="history-section">
           {selectedRecord ? (
             <div>
-              <button className="back-btn" onClick={() => setSelectedRecord(null)}>← 목록으로</button>
-              <h3>{selectedRecord.pet_type === "dog" ? "🐶" : "🐱"} {selectedRecord.symptoms}</h3>
-              <p className="date">{new Date(selectedRecord.created_at).toLocaleString("ko-KR")}</p>
+              <button className="back-btn" onClick={() => setSelectedRecord(null)}>
+                ← 목록으로
+              </button>
+              <h3>
+                {selectedRecord.pet_type === "dog" ? "🐶" : "🐱"} {selectedRecord.symptoms}
+              </h3>
+              <p className="date">
+                {new Date(selectedRecord.created_at).toLocaleString("ko-KR")}
+              </p>
               <div className="results-grid">
                 {[
-                  { model: "Claude (Bedrock)", diagnosis: selectedRecord.result_claude },
-                  { model: "GPT (OpenAI)", diagnosis: selectedRecord.result_gpt },
-                  { model: "Gemini (Google)", diagnosis: selectedRecord.result_gemini },
+                  { model: "Claude", diagnosis: selectedRecord.result_claude },
+                  { model: "GPT", diagnosis: selectedRecord.result_gpt },
+                  { model: "Gemini", diagnosis: selectedRecord.result_gemini },
                 ].map((r) => (
-                  <div key={r.model} className="result-card" style={{ borderTopColor: MODEL_COLORS[r.model] }}>
-                    <h3 style={{ color: MODEL_COLORS[r.model] }}>{r.model}</h3>
-                    <ReactMarkdown>{r.diagnosis || "결과 없음"}</ReactMarkdown>
+                  <div
+                    key={r.model}
+                    className="result-card"
+                    style={{ borderTopColor: MODEL_COLORS[`${r.model} (OpenAI)`] || "#888" }}
+                  >
+                    <h3>{r.model}</h3>
+                    <pre style={{ whiteSpace: "pre-wrap", fontSize: "0.75rem" }}>
+                      {r.diagnosis || "결과 없음"}
+                    </pre>
                   </div>
                 ))}
               </div>
@@ -196,20 +450,24 @@ export default function MainPage() {
                 <li key={h.id} onClick={() => setSelectedRecord(h)}>
                   <span>{h.pet_type === "dog" ? "🐶" : "🐱"}</span>
                   <span className="symptoms-preview">{h.symptoms}</span>
-                  <span className="date">{new Date(h.created_at).toLocaleString("ko-KR")}</span>
+                  <span className="date">
+                    {new Date(h.created_at).toLocaleString("ko-KR")}
+                  </span>
                 </li>
               ))}
             </ul>
           )}
         </div>
       )}
+
+      {/* 병원 방문용 증상 요약 카드 모달 (F5) */}
       {showSummaryCard && (
         <SymptomSummaryCard
           petType={petType}
           symptoms={symptoms}
-          results={results}
-          summary={summary}
-          timestamp={diagnosisTime}
+          llmResponses={llmResponses}
+          consolidated={consolidated}
+          timestamp={diagnosisTimestamp}
           onClose={() => setShowSummaryCard(false)}
         />
       )}
