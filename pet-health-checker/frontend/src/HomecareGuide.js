@@ -4,6 +4,7 @@ const FALLBACK_GUIDE = {
   dos: ["미지근한 물을 조금씩 자주 줍니다", "따뜻하고 조용한 곳에서 쉬게 합니다", "활동량과 식욕 변화를 꾸준히 관찰합니다"],
   donts: ["사람 음식을 주지 마세요", "인터넷 민간요법은 시도하지 마세요", "임의로 약을 먹이지 마세요"],
   warningsigns: ["12시간 이상 증상이 지속될 때", "혈변 또는 혈뇨가 보일 때", "의식이 흐려지거나 경련이 있을 때"],
+  shopping_suggestions: [],
 };
 
 const URGENCY_LABEL = [
@@ -155,6 +156,35 @@ export default function HomecareGuide({ diagnosisResult, onBackToDiagnose, onGoT
           ))}
         </ul>
       </div>
+
+      {/* 추천 용품 (쿠팡) */}
+      {guide.shopping_suggestions && guide.shopping_suggestions.length > 0 && (
+        <div className="guide-card guide-shopping">
+          <div className="guide-card-header">
+            <span className="guide-icon">🛒</span>
+            <h3>도움이 될 만한 용품</h3>
+          </div>
+          <ul className="shopping-list">
+            {guide.shopping_suggestions.map((item, i) => (
+              <li key={i} className="shopping-item">
+                <a
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shopping-link"
+                >
+                  <div className="shopping-category">{item.category}</div>
+                  {item.reason && <div className="shopping-reason">{item.reason}</div>}
+                  <div className="shopping-cta">쿠팡에서 검색 →</div>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <div className="shopping-disclaimer">
+            ※ 참고용이며 구매 전 수의사 상담을 권장합니다
+          </div>
+        </div>
+      )}
 
       {/* 하단 버튼 */}
       <div className="homecare-actions">

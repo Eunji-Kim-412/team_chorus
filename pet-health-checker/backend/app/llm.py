@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+import urllib.parse
 import openai
 from google import genai
 from app.config import (
@@ -143,13 +145,58 @@ HOMECARE_PROMPT = """당신은 반려동물 케어 전문 AI입니다.
 - 약물 이름이나 용량은 절대 언급하지 마세요
 - "확실히 ~입니다" 같은 단정 표현 금지, "~가능성이 있습니다" 톤 유지
 - 각 항목은 구체적이고 실용적으로 작성
+- shopping_suggestions에는 약물·처방약·영양제(아세트아미노펜·이부프로펜·타이레놀·항생제·스테로이드 등) 절대 포함 금지
+- shopping_suggestions는 보호자가 집에서 활용할 수 있는 일반 용품만 (예: 전해질 보충제, 부드러운 사료, 수분 공급 도구, 보온 용품, 위생용품 등)
+- shopping_suggestions는 최대 3개, 각 항목의 search_query는 한국어 쿠팡 검색에 적합한 짧고 구체적인 키워드로 작성
 - 반드시 아래 JSON 형식으로만 응답하세요
 
 {
   "dos": ["해야 할 것 1", "해야 할 것 2", "해야 할 것 3", "해야 할 것 4"],
   "donts": ["하지 말 것 1", "하지 말 것 2", "하지 말 것 3"],
-  "warningsigns": ["악화 신호 1", "악화 신호 2", "악화 신호 3", "악화 신호 4"]
+  "warningsigns": ["악화 신호 1", "악화 신호 2", "악화 신호 3", "악화 신호 4"],
+  "shopping_suggestions": [
+    {"category": "전해질 보충제", "search_query": "강아지 전해질 보충제", "reason": "수분 보충에 도움"}
+  ]
 }"""
+
+
+# 쇼핑 추천에서 절대 노출되면 안 되는 약물·처방약 키워드
+DRUG_BLACKLIST = [
+    "아세트아미노펜", "이부프로펜", "타이레놀", "애드빌", "아스피린",
+    "naproxen", "naprosyn", "aspirin", "ibuprofen", "acetaminophen",
+    "처방약", "처방", "항생제", "스테로이드", "진통제", "해열제",
+    "antibiotic", "steroid",
+]
+
+
+def _build_coupang_url(query: str) -> str:
+    return f"https://www.coupang.com/np/search?q={urllib.parse.quote(query)}"
+
+
+def _filter_shopping_suggestions(suggestions) -> list:
+    if not isinstance(suggestions, list):
+        return []
+    safe = []
+    for s in suggestions:
+        if not isinstance(s, dict):
+            continue
+        category = str(s.get("category", "")).strip()
+        query = str(s.get("search_query", "")).strip()
+        reason = str(s.get("reason", "")).strip()
+        if not query:
+            continue
+        haystack = f"{category} {query} {reason}".lower()
+        if any(banned.lower() in haystack for banned in DRUG_BLACKLIST):
+            continue
+        safe.append({
+            "category": category,
+            "search_query": query,
+            "reason": reason,
+            "url": _build_coupang_url(query),
+        })
+        if len(safe) >= 3:
+            break
+    return safe
 
 
 async def call_gemini_homecare(pet_type: str, breed: str, age_years: int, medical_history: list, diagnosis_name: str, urgency_score: float) -> dict:
@@ -176,11 +223,14 @@ async def call_gemini_homecare(pet_type: str, breed: str, age_years: int, medica
     text = await asyncio.to_thread(_invoke)
 
     # JSON 파싱
-    import re
     match = re.search(r'\{.*\}', text, re.DOTALL)
-    if match:
-        return json.loads(match.group())
-    raise ValueError(f"Gemini가 올바른 JSON을 반환하지 않았습니다: {text}")
+    if not match:
+        raise ValueError(f"Gemini가 올바른 JSON을 반환하지 않았습니다: {text}")
+    guide = json.loads(match.group())
+
+    # 쇼핑 추천 후처리: 약물 블랙리스트 필터 + 쿠팡 URL 부착
+    guide["shopping_suggestions"] = _filter_shopping_suggestions(guide.get("shopping_suggestions"))
+    return guide
 
 
 async def _safe_call(name: str, fn, pet_type: str, symptoms: str) -> dict:
