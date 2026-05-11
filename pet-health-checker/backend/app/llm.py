@@ -139,23 +139,29 @@ async def summarize_results(pet_type: str, symptoms: str, results: list[dict]) -
 
 
 HOMECARE_PROMPT = """당신은 반려동물 케어 전문 AI입니다.
-아래 반려동물 정보와 진단 결과를 바탕으로 홈케어 가이드를 작성해주세요.
+홈케어 가이드를 짧고 명료하게 작성합니다.
 
-규칙:
-- 약물 이름이나 용량은 절대 언급하지 마세요
-- "확실히 ~입니다" 같은 단정 표현 금지, "~가능성이 있습니다" 톤 유지
-- 각 항목은 구체적이고 실용적으로 작성
-- shopping_suggestions에는 약물·처방약·영양제(아세트아미노펜·이부프로펜·타이레놀·항생제·스테로이드 등) 절대 포함 금지
-- shopping_suggestions는 보호자가 집에서 활용할 수 있는 일반 용품만 (예: 전해질 보충제, 부드러운 사료, 수분 공급 도구, 보온 용품, 위생용품 등)
-- shopping_suggestions는 최대 3개, 각 항목의 search_query는 한국어 쿠팡 검색에 적합한 짧고 구체적인 키워드로 작성
-- 반드시 아래 JSON 형식으로만 응답하세요
+스타일 규칙:
+- 각 항목은 한 줄, 한국어 30자 이내
+- 개조식(명사형/짧은 동사구), 부연 설명 X, 핵심만
+- 좋은 예: "미지근한 물 자주 급여", "12시간 금식 후 소량 급여", "사람 음식 금지", "혈변·혈뇨 발견 시"
+- 나쁜 예: "~하는 것이 도움이 될 수 있습니다", "~해주시는 것이 좋습니다" (X, 풀어쓰기 금지)
 
+안전 규칙:
+- 약물 이름·용량 절대 언급 금지
+- 확정 진단 표현 금지 ("~병입니다" X)
+- shopping_suggestions에 약물·처방약·영양제·진통제 절대 포함 금지
+- shopping_suggestions는 보호자 일반 용품만 (전해질 보충제, 부드러운 사료, 자동 급수기, 보온 용품 등)
+- shopping_suggestions 최대 3개
+- search_query는 쿠팡 검색용 짧은 한국어 키워드, reason은 15자 이내
+
+반드시 아래 JSON 형식으로만 응답하세요:
 {
-  "dos": ["해야 할 것 1", "해야 할 것 2", "해야 할 것 3", "해야 할 것 4"],
-  "donts": ["하지 말 것 1", "하지 말 것 2", "하지 말 것 3"],
-  "warningsigns": ["악화 신호 1", "악화 신호 2", "악화 신호 3", "악화 신호 4"],
+  "dos": ["...", "...", "...", "..."],
+  "donts": ["...", "...", "..."],
+  "warningsigns": ["...", "...", "...", "..."],
   "shopping_suggestions": [
-    {"category": "전해질 보충제", "search_query": "강아지 전해질 보충제", "reason": "수분 보충에 도움"}
+    {"category": "전해질 보충제", "search_query": "강아지 전해질 보충제", "reason": "수분 보충"}
   ]
 }"""
 
@@ -220,17 +226,23 @@ async def call_gemini_homecare(pet_type: str, breed: str, age_years: int, medica
         )
         return resp.text
 
-    text = await asyncio.to_thread(_invoke)
-
-    # JSON 파싱
-    match = re.search(r'\{.*\}', text, re.DOTALL)
-    if not match:
-        raise ValueError(f"Gemini가 올바른 JSON을 반환하지 않았습니다: {text}")
-    guide = json.loads(match.group())
-
-    # 쇼핑 추천 후처리: 약물 블랙리스트 필터 + 쿠팡 URL 부착
-    guide["shopping_suggestions"] = _filter_shopping_suggestions(guide.get("shopping_suggestions"))
-    return guide
+    # Gemini가 가끔 JSON 형식을 어기므로 최대 2회 시도
+    last_error = None
+    for _ in range(2):
+        try:
+            text = await asyncio.to_thread(_invoke)
+            cleaned = re.sub(r"```(?:json)?|```", "", text, flags=re.IGNORECASE).strip()
+            match = re.search(r'\{.*\}', cleaned, re.DOTALL)
+            if not match:
+                last_error = ValueError(f"JSON 블록을 찾지 못함: {text[:200]}")
+                continue
+            guide = json.loads(match.group())
+            guide["shopping_suggestions"] = _filter_shopping_suggestions(guide.get("shopping_suggestions"))
+            return guide
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+    raise ValueError(f"Gemini JSON 파싱 실패: {last_error}")
 
 
 async def _safe_call(name: str, fn, pet_type: str, symptoms: str) -> dict:
