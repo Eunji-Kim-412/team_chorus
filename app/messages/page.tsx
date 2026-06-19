@@ -92,7 +92,7 @@ export default function MessageAgentPage() {
   });
 
   return (
-    <AppLayout active="messages" title="메시지 에이전트">
+    <AppLayout active="messages" title="메시지 관리">
       <div className="p-6 space-y-5">
 
         {/* 에이전트 브리핑 배너 */}
