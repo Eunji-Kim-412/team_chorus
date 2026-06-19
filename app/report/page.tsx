@@ -28,20 +28,24 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [page, setPage] = useState(0);
+  const PAGE_SIZE = 20;
 
   const selected: MockPatient | undefined = useMemo(
     () => patients.find((p) => p.id === patientId),
     [patients, patientId]
   );
 
-  // 환자 이름(또는 보호자명)으로 검색
-  const matches = useMemo(() => {
+  // 검색(이름·보호자명) 또는 전체 목록
+  const filteredList = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return [];
-    return patients
-      .filter((p) => p.petName.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q))
-      .slice(0, 8);
+    if (!q) return patients;
+    return patients.filter((p) => p.petName.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q));
   }, [patients, query]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const pageItems = filteredList.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const generate = async () => {
     if (!selected) return;
@@ -109,9 +113,21 @@ export default function ReportPage() {
   return (
     <AppLayout active="report" title="건강 레포트">
       <div className="px-6 py-6 max-w-3xl mx-auto">
-        <p className="text-sm text-gray-500 mb-5">
+        <p className="text-sm text-gray-500 mb-4">
           환자의 진료 기록을 바탕으로 <span className="font-semibold text-gray-700">보호자용 건강 요약 레포트</span>를 AI가 자동 생성합니다.
         </p>
+
+        {/* EMR 연동 안내 */}
+        <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-5">
+          <span className="text-emerald-600 mt-0.5">ℹ️</span>
+          <p className="text-xs text-emerald-700 leading-relaxed">
+            건강 레포트는 <span className="font-semibold">EMR(전자차트) 연동 시 사용할 수 있는 기능</span>입니다.
+            진료·문진 기록을 불러와 환자별 레포트를 생성합니다.
+            <span className="inline-flex items-center gap-1 ml-1 font-semibold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>현재: 우리엔 PMS 연결됨
+            </span>
+          </p>
+        </div>
 
         {/* 환자 검색 */}
         <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-5">
@@ -120,42 +136,68 @@ export default function ReportPage() {
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
             <input
               value={query}
-              onChange={(e) => { setQuery(e.target.value); setPatientId(""); }}
+              onChange={(e) => { setQuery(e.target.value); setPatientId(""); setPage(0); }}
               placeholder="반려동물 이름 또는 보호자명을 입력하세요"
               className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
           </div>
 
-          {/* 검색 결과 */}
-          {query.trim() && (
-            <div className="mt-3 space-y-1.5">
-              {matches.length === 0 ? (
-                <p className="text-xs text-gray-400 py-2">검색 결과가 없어요.</p>
-              ) : (
-                matches.map((p) => {
-                  const active = p.id === patientId;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setPatientId(p.id)}
-                      className={`w-full text-left p-3 rounded-xl border transition-colors ${
-                        active ? "bg-emerald-50 border-emerald-300" : "bg-gray-50 border-gray-200 hover:border-emerald-200"
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-gray-900 text-sm">{p.petName}</span>
-                        <span className="text-xs text-gray-400">{p.breed} · {p.age}세</span>
-                        {p.atRisk && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">이탈 위험</span>}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-[11px]">
-                        <span className="text-gray-500">보호자 <span className="font-semibold text-gray-700">{p.ownerName}</span></span>
-                        <span className="text-gray-500">최근 방문 <span className="font-semibold text-gray-700">{p.lastVisit ?? "-"}</span></span>
-                        <span className="text-gray-500">최초 방문 <span className="font-semibold text-gray-700">{p.firstVisit ?? "-"}</span></span>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
+          {/* 목록 헤더 */}
+          <div className="flex items-center justify-between mt-3 mb-2">
+            <span className="text-xs text-gray-400">
+              총 {filteredList.length}마리 {query.trim() && "(검색결과)"} · 페이지당 {PAGE_SIZE}행
+            </span>
+          </div>
+
+          {/* 환자 목록 (20행 페이지네이션) */}
+          <div className="space-y-1.5">
+            {pageItems.length === 0 ? (
+              <p className="text-xs text-gray-400 py-2">검색 결과가 없어요.</p>
+            ) : (
+              pageItems.map((p) => {
+                const active = p.id === patientId;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => setPatientId(p.id)}
+                    className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                      active ? "bg-emerald-50 border-emerald-300" : "bg-gray-50 border-gray-200 hover:border-emerald-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-bold text-gray-900 text-sm">{p.petName}</span>
+                      <span className="text-xs text-gray-400">{p.breed} · {p.age}세</span>
+                      {p.atRisk && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">이탈 위험</span>}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-[11px]">
+                      <span className="text-gray-500">보호자 <span className="font-semibold text-gray-700">{p.ownerName}</span></span>
+                      <span className="text-gray-500">최근 방문 <span className="font-semibold text-gray-700">{p.lastVisit ?? "-"}</span></span>
+                      <span className="text-gray-500">최초 방문 <span className="font-semibold text-gray-700">{p.firstVisit ?? "-"}</span></span>
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {/* 페이지네이션 */}
+          {pageCount > 1 && (
+            <div className="flex items-center justify-center gap-3 mt-3">
+              <button
+                onClick={() => setPage((v) => Math.max(0, v - 1))}
+                disabled={safePage === 0}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-40 hover:bg-gray-50"
+              >
+                ← 이전
+              </button>
+              <span className="text-xs font-medium text-gray-500">{safePage + 1} / {pageCount}</span>
+              <button
+                onClick={() => setPage((v) => Math.min(pageCount - 1, v + 1))}
+                disabled={safePage >= pageCount - 1}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 disabled:opacity-40 hover:bg-gray-50"
+              >
+                다음 →
+              </button>
             </div>
           )}
 
