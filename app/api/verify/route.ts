@@ -33,6 +33,12 @@ const REQUIRED: Record<string, { key: string; label: string; severity: Severity;
 const PHONE_RE = /0\d{1,2}-?\d{3,4}-?\d{4}/;
 const HANGUL_RE = /[가-힣]/;
 const OVERSTATE = ["100%", "완치 보장", "무조건", "절대 안전", "부작용 없"];
+// 욕설/비속어 — 보호자 안내에 절대 포함되면 안 되는 표현 (수의 맥락 오탐 방지로 '새끼' 단독은 제외)
+const PROFANITY = [
+  "시발", "씨발", "시발놈", "씨발놈", "씨발년", "시팔", "씨팔", "ㅅㅂ", "ㅄ", "ㅂㅅ",
+  "병신", "지랄", "좆", "개새끼", "새끼야", "미친놈", "미친년", "닥쳐", "꺼져", "엿먹",
+  "썅", "쌍놈", "개소리", "또라이", "등신",
+];
 
 function ruleCheck(message: string, messageType: string, language: string): { checks: Check[]; issues: Issue[] } {
   const checks: Check[] = [];
@@ -44,6 +50,12 @@ function ruleCheck(message: string, messageType: string, language: string): { ch
     const ok = r.any.some((kw) => message.includes(kw));
     checks.push({ key: r.key, label: r.label, ok, severity: r.severity });
     if (!ok) issues.push({ severity: r.severity, label: `${r.label} 누락`, detail: `${r.label} 관련 문구가 안내문에 보이지 않습니다.` });
+  }
+
+  // 욕설/비속어 검사 (최우선 위험)
+  const hitProfanity = PROFANITY.filter((w) => message.includes(w));
+  if (hitProfanity.length) {
+    issues.push({ severity: "error", label: "부적절한 표현(욕설/비속어)", detail: `보호자에게 보낼 수 없는 표현이 포함되어 있습니다: ${hitProfanity.join(", ")}` });
   }
 
   // 위험 표현/형식 검사
@@ -107,14 +119,19 @@ export async function POST(req: NextRequest) {
   }
 
   const errorCount = issues.filter((i) => i.severity === "error").length;
-  const passedChecks = checks.filter((c) => c.ok).length;
-  const score = checks.length ? Math.round((passedChecks / checks.length) * 100) : 100;
+  const warningCount = issues.length - errorCount;
+
+  // 점수: 필수항목 통과율을 기준으로, 발견된 이슈(오류/경고)만큼 감점.
+  // 오류가 하나라도 있으면 50점 이하로 제한해 '위험'을 명확히 표시.
+  const base = checks.length ? Math.round((checks.filter((c) => c.ok).length / checks.length) * 100) : 100;
+  let score = Math.max(0, base - errorCount * 30 - warningCount * 10);
+  if (errorCount > 0) score = Math.min(score, 50);
 
   return NextResponse.json({
     passed: errorCount === 0,
     score,
     errorCount,
-    warningCount: issues.length - errorCount,
+    warningCount,
     checks,
     issues,
     aiUsed,

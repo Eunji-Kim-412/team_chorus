@@ -70,7 +70,6 @@ function Sidebar({ active }: { active: "dashboard" | "marketing" }) {
   const navItems: { key: string; href: string; label: string; d: string; isNew?: boolean }[] = [
     { key: "dashboard", href: "/", label: "오늘의 케어 메시지", d: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
     { key: "messages",  href: "/messages",          label: "메시지 관리",       d: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" },
-    { key: "triage",    href: "/triage",          label: "보호자 답장 대응",   d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", isNew: true },
     { key: "report",    href: "/report",          label: "건강 레포트",        d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", isNew: true },
     { key: "pets",      href: "/pets",          label: "반려동물",          d: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
     { key: "owners",    href: "/owners",          label: "보호자",            d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
@@ -129,7 +128,6 @@ function Sidebar({ active }: { active: "dashboard" | "marketing" }) {
 export default function DashboardPage() {
   const router = useRouter();
   const { patients, updatePatient } = usePatients();
-  const [activeTab, setActiveTab] = useState<TabType>("all");
   const [selectedId, setSelectedId] = useState<string>("");
   const [toast, setToast] = useState<string | null>(null);
 
@@ -147,19 +145,11 @@ export default function DashboardPage() {
   const msg = selectedPatient ? getSampleMessage(selectedPatient) : "";
   const byteLen = getByteLength(msg);
 
-  const tabs: { key: TabType; label: string }[] = [
-    { key: "all",          label: "전체" },
-    { key: "post-surgery", label: "수술 후" },
-    { key: "vaccination",  label: "예방접종" },
-    { key: "revisit",      label: "재내원" },
-    { key: "atRisk",       label: "이탈 위험" },
-  ];
-
-  const filtered = patients.filter((p) => {
-    if (activeTab === "all") return true;
-    if (activeTab === "atRisk") return p.atRisk;
-    return p.messageType === activeTab;
-  });
+  // 오늘 보낼 것: 발송 대기 중 우선순위(긴급/연체)순 상위 6건만 미리보기
+  const todayList = [...patients]
+    .filter((p) => p.status === "pending")
+    .sort((a, b) => a.dDay - b.dDay)
+    .slice(0, 6);
 
   const pending = patients.filter((p) => p.status === "pending").length;
   const todayDeadline = patients.filter((p) => p.dDay <= 0 && p.status === "pending").length;
@@ -276,7 +266,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => setActiveTab("atRisk")}
+                  onClick={() => router.push("/messages")}
                   className="flex-shrink-0 flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors whitespace-nowrap"
                 >
                   일괄 메시지 보내기
@@ -286,27 +276,24 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              {/* 필터 탭 */}
-              <div className="flex gap-1 bg-white border border-gray-100 rounded-2xl p-1.5 shadow-sm">
-                {tabs.map((t) => (
-                  <button key={t.key} onClick={() => setActiveTab(t.key)}
-                    className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-colors ${
-                      activeTab === t.key ? "bg-emerald-600 text-white shadow-sm" : "text-gray-500 hover:bg-gray-50"
-                    }`}
-                  >
-                    {t.label}
-                  </button>
-                ))}
+              {/* 오늘 보낼 것 (미리보기) */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-bold text-gray-900">
+                  오늘 보낼 것 <span className="text-gray-400 font-medium">{todayList.length}</span>
+                </h2>
+                <button onClick={() => router.push("/messages")} className="text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                  전체 보기 →
+                </button>
               </div>
 
               {/* 환자 목록 */}
               <div className="space-y-2">
-                {filtered.length === 0 && (
+                {todayList.length === 0 && (
                   <div className="bg-white rounded-2xl border border-gray-100 p-10 text-center text-gray-400 text-sm">
-                    해당하는 환자가 없습니다.
+                    발송 대기 중인 환자가 없습니다.
                   </div>
                 )}
-                {filtered.map((p) => {
+                {todayList.map((p) => {
                   const meta = TYPE_META[p.messageType];
                   const dday = dDayBadge(p.dDay);
                   const status = statusBadge(p);
