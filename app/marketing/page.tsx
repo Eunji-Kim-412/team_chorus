@@ -8,6 +8,7 @@ function Sidebar({ active }: { active: "dashboard" | "marketing" }) {
   const navItems: { key: string; href: string; label: string; d: string; isNew?: boolean }[] = [
     { key: "dashboard", href: "/",          label: "오늘의 케어 메시지", d: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
     { key: "messages",  href: "/messages",           label: "메시지 관리",       d: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" },
+    { key: "report",    href: "/report",          label: "건강 레포트",        d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", isNew: true },
     { key: "pets",      href: "/pets",           label: "반려동물",          d: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
     { key: "owners",    href: "/owners",           label: "보호자",            d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
     { key: "templates", href: "/templates",           label: "템플릿",            d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
@@ -56,7 +57,7 @@ function Sidebar({ active }: { active: "dashboard" | "marketing" }) {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>연결됨
           </span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1 leading-tight">진료 문진 데이터를 분석해 마케팅 기회를 발굴합니다.</p>
+        <p className="text-[10px] text-gray-400 mt-1 leading-tight">진료 문진 데이터를 분석해 보호자와 소통하고 마케팅 기회를 발굴합니다.</p>
       </div>
     </aside>
   );
@@ -348,6 +349,18 @@ export default function MarketingPage() {
                 </svg>
                 {dateLabel}
               </span>
+            </div>
+
+            {/* EMR 연동 안내 */}
+            <div className="flex items-start gap-2 bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
+              <span className="text-emerald-600 mt-0.5">ℹ️</span>
+              <p className="text-xs text-emerald-700 leading-relaxed">
+                마케팅 인사이트는 <span className="font-semibold">EMR(전자차트) 연동 시 확인할 수 있는 데이터</span>입니다.
+                진료·문진 기록을 분석해 신규 고객 유입 기회를 발굴합니다.
+                <span className="inline-flex items-center gap-1 ml-1 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>현재: 우리엔 PMS 연결됨
+                </span>
+              </p>
             </div>
 
             {/* 녹색 강조 배너 */}

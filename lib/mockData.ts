@@ -21,6 +21,8 @@ export interface MockPatient {
   nextVisit?: string;
   revisitDate?: string;
   revisitReason?: string;
+  firstVisit?: string;
+  lastVisit?: string;
 }
 
 function daysFromNow(days: number): string {
@@ -151,6 +153,16 @@ function generatePatients(): MockPatient[] {
     }
 
     patients.push(base);
+  }
+
+  // 방문 이력(최초/최근 방문일) — id 기반 시드로 결정적 생성
+  for (const p of patients) {
+    const seed = (parseInt(p.id, 10) * 2654435761) % 2147483647;
+    const r = seededRand(seed || 1);
+    const lastAgo = p.atRisk ? (Math.abs(p.dDay) || 90) : Math.floor(r() * 110) + 5;
+    const firstAgo = lastAgo + Math.floor(r() * 1280) + 200;
+    p.lastVisit = daysFromNow(-lastAgo);
+    p.firstVisit = daysFromNow(-firstAgo);
   }
 
   return patients;

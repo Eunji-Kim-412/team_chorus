@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { usePatients } from "@/context/PatientsContext";
 import type { MockPatient } from "@/lib/mockData";
@@ -200,7 +201,7 @@ export default function PetsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <h3 className="font-bold text-gray-900">{p.petName}</h3>
+                      <Link href={`/pets/${p.id}`} className="font-bold text-gray-900 hover:text-emerald-600 hover:underline">{p.petName}</Link>
                       {p.atRisk && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">⚠️ 위험</span>}
                       {ageTag && <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full">{ageTag}</span>}
                     </div>

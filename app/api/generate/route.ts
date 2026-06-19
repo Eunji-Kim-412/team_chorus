@@ -8,6 +8,12 @@ function isQuotaError(err: unknown): boolean {
   return msg.includes("429") || msg.includes("quota") || msg.includes("Too Many Requests") || msg.includes("RESOURCE_EXHAUSTED");
 }
 
+// API 키 미설정 등 provider 사용 불가 상황 → 로컬 데모용 폴백으로 처리
+function isProviderUnavailable(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return isQuotaError(err) || msg.includes("is not set") || msg.includes("API_KEY") || msg.includes("API key");
+}
+
 function buildFallbackMessage(body: PatientInfo): string {
   const pet = body.patientName ?? "반려동물";
   const breed = body.breed ?? "";
@@ -38,8 +44,25 @@ export async function POST(req: NextRequest) {
 
     const language: Language = body.language ?? "ko";
     const tone: Tone = body.tone ?? "friendly";
-    const provider = getAIProvider();
     const systemPrompt = getSystemPrompt(language, tone, body.customTone);
+
+    // provider 생성 실패(키 미설정 등) → 데모용 템플릿 폴백
+    let provider;
+    try {
+      provider = getAIProvider();
+    } catch (err) {
+      if (isProviderUnavailable(err)) {
+        if (body.messageType === "vaccination" && body.reminderDaysList && body.reminderDaysList.length > 1) {
+          const messages = body.reminderDaysList.map((days) => ({
+            days,
+            message: buildFallbackMessage({ ...body, reminderDays: days }),
+          }));
+          return NextResponse.json({ messages, fallback: true });
+        }
+        return NextResponse.json({ message: buildFallbackMessage(body), fallback: true });
+      }
+      throw err;
+    }
 
     if (body.messageType === "vaccination" && body.reminderDaysList && body.reminderDaysList.length > 1) {
       try {
@@ -52,7 +75,7 @@ export async function POST(req: NextRequest) {
         );
         return NextResponse.json({ messages: results });
       } catch (err) {
-        if (isQuotaError(err)) {
+        if (isProviderUnavailable(err)) {
           const messages = body.reminderDaysList.map((days) => ({
             days,
             message: buildFallbackMessage({ ...body, reminderDays: days }),
@@ -70,7 +93,7 @@ export async function POST(req: NextRequest) {
       const result = await provider.generate(systemPrompt, userPrompt);
       return NextResponse.json({ message: result });
     } catch (err) {
-      if (isQuotaError(err)) {
+      if (isProviderUnavailable(err)) {
         const message = buildFallbackMessage(body);
         return NextResponse.json({ message, fallback: true });
       }

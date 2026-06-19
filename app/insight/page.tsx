@@ -48,6 +48,12 @@ export default function InsightPage() {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   }).length + sent;
 
+  // AI 자동화 효과(추정): 수기 작성 대비 절약 시간
+  const AI_MIN = 3.2;      // 평균 발송 소요(AI)
+  const MANUAL_MIN = 8;    // 수기 작성 시 가정(추정)
+  const savedTotalMin = Math.max(0, Math.round(thisMonthSent * (MANUAL_MIN - AI_MIN)));
+  const savedHours = (savedTotalMin / 60).toFixed(1);
+
   return (
     <AppLayout active="insight" title="케어 인사이트">
       <div className="px-6 py-6 max-w-4xl mx-auto space-y-6">
@@ -72,6 +78,30 @@ export default function InsightPage() {
               <div className={`text-xs mt-1 ${c.subColor}`}>{c.sub}</div>
             </div>
           ))}
+        </div>
+
+        {/* AI 자동화 효과 — 절약 시간을 케어 집중으로 */}
+        <div className="bg-gradient-to-br from-emerald-600 to-teal-600 rounded-2xl p-6 text-white shadow-sm">
+          <div className="flex items-start gap-3">
+            <div className="text-3xl flex-shrink-0">🐾</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-emerald-50/80 mb-1">AI 자동화 효과</p>
+              <h2 className="text-lg font-black leading-snug">
+                메시지 발송 시간을 이번 달 약 <span className="underline decoration-emerald-300">{savedHours}시간</span> 절약했어요.<br />
+                그만큼 더 많은 반려동물 친구들의 건강에 <span className="underline decoration-emerald-300">시간을 더 집중</span>할 수 있었어요.
+              </h2>
+              <p className="text-xs text-emerald-50/80 mt-2 leading-relaxed">
+                발송 완료 {thisMonthSent}건 × (수기 약 {MANUAL_MIN}분 → AI {AI_MIN}분) 기준 추정 ·
+                보호자 응답률 78% · 재방문 전환율 45%로 이어졌어요.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                {[`발송완료 ${thisMonthSent}건`, "보호자 응답률 78%", "재방문 전환율 45%", `평균 발송 ${AI_MIN}분`].map((chip) => (
+                  <span key={chip} className="text-[11px] font-semibold bg-white/15 px-2.5 py-1 rounded-full">{chip}</span>
+                ))}
+              </div>
+              <p className="text-[10px] text-emerald-50/60 mt-2">※ 절약 시간은 수기 작성 대비 추정치입니다.</p>
+            </div>
+          </div>
         </div>
 
         {/* 메시지 유형별 발송 현황 */}
