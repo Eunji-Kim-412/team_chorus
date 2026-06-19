@@ -73,6 +73,21 @@ function generateMockMessages(patients: MockPatient[]): MessageLog[] {
       });
     }
   }
+  // 시연용 개별 지정 이력 — 망고: 심장사상충 예방접종 안내
+  const mango = patients.find((p) => p.petName === "망고");
+  if (mango) {
+    const y = new Date().getFullYear();
+    logs.push({
+      id: `seed-${mango.id}-heartworm`,
+      patientId: mango.id,
+      patientName: mango.petName,
+      ownerName: mango.ownerName,
+      messageType: "vaccination",
+      sentAt: new Date(y, 1, 20, 10, 30, 0).toISOString(), // 2월 20일 발송
+      preview: "안녕하세요, 우리동물병원입니다 💉 망고 보호자님, 심장사상충 예방접종일이 3월 1일입니다. 잊지 마시고 내원 바랍니다 🐾 우리동물병원 드림",
+    });
+  }
+
   // 최신순 정렬
   logs.sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   return logs;
