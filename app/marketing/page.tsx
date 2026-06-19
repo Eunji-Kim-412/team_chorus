@@ -56,7 +56,7 @@ function Sidebar({ active }: { active: "dashboard" | "marketing" }) {
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block"></span>연결됨
           </span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1 leading-tight">진료 문진 데이터를 분석해 마케팅 기회를 발굴합니다.</p>
+        <p className="text-[10px] text-gray-400 mt-1 leading-tight">진료 문진 데이터를 분석해 보호자와 소통하고 마케팅 기회를 발굴합니다.</p>
       </div>
     </aside>
   );
