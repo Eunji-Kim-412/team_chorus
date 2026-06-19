@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { usePatients } from "@/context/PatientsContext";
 import type { MockPatient } from "@/lib/mockData";
@@ -20,6 +21,7 @@ interface ReportData {
 
 export default function ReportPage() {
   const { patients } = usePatients();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [patientId, setPatientId] = useState("");
   const [report, setReport] = useState<ReportData | null>(null);
@@ -75,6 +77,33 @@ export default function ReportPage() {
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  // 레포트 내용을 보호자용 SMS로 변환해 발송 흐름(/result)으로 전달
+  const sendToOwner = () => {
+    if (!report) return;
+    const lines: string[] = [];
+    lines.push(`${report.ownerName ?? ""} 보호자님, 안녕하세요. 우리동물병원입니다 🐾`.trim());
+    lines.push(`${report.petName}의 건강 안내를 전해드려요.`);
+    lines.push("");
+    // 관리/회복/주의/팁 관련 섹션 발췌
+    const care = report.sections.find((s) => /관리|팁|회복|주의|요약/.test(s.title));
+    if (care) { lines.push(care.body); lines.push(""); }
+    if (report.reminders.length) {
+      lines.push("[챙겨주실 일정]");
+      report.reminders.forEach((r) => lines.push(`· ${r}`));
+      lines.push("");
+    }
+    lines.push("궁금하신 점은 언제든 병원으로 연락 주세요. 감사합니다 :)");
+
+    sessionStorage.setItem("vetscribe_result", JSON.stringify({
+      message: lines.join("\n"),
+      messages: null,
+      patientName: report.petName,
+      messageType: "report",
+      language: "ko",
+    }));
+    router.push("/result");
   };
 
   return (
@@ -206,6 +235,12 @@ export default function ReportPage() {
 
               <p className="text-[11px] text-gray-400 leading-relaxed border-t border-gray-100 pt-3">{report.disclaimer}</p>
 
+              <button
+                onClick={sendToOwner}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-colors flex items-center justify-center gap-1.5"
+              >
+                📩 보호자에게 안내사항 보내기
+              </button>
               <div className="flex gap-2">
                 <button
                   onClick={copyReport}
