@@ -8,6 +8,9 @@ import type { MockPatient } from "@/lib/mockData";
 interface ReportSection { icon: string; title: string; body: string }
 interface ReportData {
   petName: string;
+  ownerName?: string;
+  firstVisit?: string;
+  lastVisit?: string;
   headline: string;
   sections: ReportSection[];
   reminders: string[];
@@ -17,6 +20,7 @@ interface ReportData {
 
 export default function ReportPage() {
   const { patients } = usePatients();
+  const [query, setQuery] = useState("");
   const [patientId, setPatientId] = useState("");
   const [report, setReport] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
@@ -27,6 +31,15 @@ export default function ReportPage() {
     () => patients.find((p) => p.id === patientId),
     [patients, patientId]
   );
+
+  // 환자 이름(또는 보호자명)으로 검색
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    return patients
+      .filter((p) => p.petName.toLowerCase().includes(q) || p.ownerName.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [patients, query]);
 
   const generate = async () => {
     if (!selected) return;
@@ -51,8 +64,11 @@ export default function ReportPage() {
 
   const copyReport = async () => {
     if (!report) return;
+    const meta =
+      `보호자: ${report.ownerName ?? "-"}\n` +
+      `최초 방문일: ${report.firstVisit ?? "-"} · 최근 방문일: ${report.lastVisit ?? "-"}\n\n`;
     const text =
-      `${report.headline}\n\n` +
+      `${report.headline}\n\n` + meta +
       report.sections.map((s) => `[${s.title}]\n${s.body}`).join("\n\n") +
       (report.reminders.length ? `\n\n[챙길 일정]\n` + report.reminders.map((r) => `· ${r}`).join("\n") : "") +
       `\n\n${report.disclaimer}`;
@@ -68,30 +84,68 @@ export default function ReportPage() {
           환자의 진료 기록을 바탕으로 <span className="font-semibold text-gray-700">보호자용 건강 요약 레포트</span>를 AI가 자동 생성합니다.
         </p>
 
-        {/* 환자 선택 */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-5 flex flex-col sm:flex-row gap-3 sm:items-end">
-          <div className="flex-1">
-            <label className="block text-xs font-semibold text-gray-500 mb-1.5">환자 선택</label>
-            <select
-              value={patientId}
-              onChange={(e) => setPatientId(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
-            >
-              <option value="">환자를 선택하세요</option>
-              {patients.slice(0, 60).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.petName} · {p.breed} · {p.age}세 · {p.ownerName} 보호자
-                </option>
-              ))}
-            </select>
+        {/* 환자 검색 */}
+        <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm mb-5">
+          <label className="block text-xs font-semibold text-gray-500 mb-1.5">환자 이름 검색</label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <input
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setPatientId(""); }}
+              placeholder="반려동물 이름 또는 보호자명을 입력하세요"
+              className="w-full border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+            />
           </div>
-          <button
-            onClick={generate}
-            disabled={!selected || loading}
-            className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors whitespace-nowrap"
-          >
-            {loading ? "생성 중…" : "🤖 레포트 생성"}
-          </button>
+
+          {/* 검색 결과 */}
+          {query.trim() && (
+            <div className="mt-3 space-y-1.5">
+              {matches.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">검색 결과가 없어요.</p>
+              ) : (
+                matches.map((p) => {
+                  const active = p.id === patientId;
+                  return (
+                    <button
+                      key={p.id}
+                      onClick={() => setPatientId(p.id)}
+                      className={`w-full text-left p-3 rounded-xl border transition-colors ${
+                        active ? "bg-emerald-50 border-emerald-300" : "bg-gray-50 border-gray-200 hover:border-emerald-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-bold text-gray-900 text-sm">{p.petName}</span>
+                        <span className="text-xs text-gray-400">{p.breed} · {p.age}세</span>
+                        {p.atRisk && <span className="text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">이탈 위험</span>}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        <span className="text-gray-500">보호자 <span className="font-semibold text-gray-700">{p.ownerName}</span></span>
+                        <span className="text-gray-500">최근 방문 <span className="font-semibold text-gray-700">{p.lastVisit ?? "-"}</span></span>
+                        <span className="text-gray-500">최초 방문 <span className="font-semibold text-gray-700">{p.firstVisit ?? "-"}</span></span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* 선택된 환자 + 생성 버튼 */}
+          {selected && (
+            <div className="mt-4 flex flex-col sm:flex-row sm:items-center gap-3 pt-4 border-t border-gray-100">
+              <div className="flex-1 text-sm">
+                <span className="font-bold text-gray-900">{selected.petName}</span>
+                <span className="text-gray-500"> · {selected.ownerName} 보호자 · 최근 방문 {selected.lastVisit ?? "-"}</span>
+              </div>
+              <button
+                onClick={generate}
+                disabled={loading}
+                className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white text-sm font-bold px-5 py-2.5 rounded-xl transition-colors whitespace-nowrap"
+              >
+                {loading ? "생성 중…" : "🤖 레포트 생성"}
+              </button>
+            </div>
+          )}
         </div>
 
         {error && <p className="text-sm text-red-500 mb-4">{error}</p>}
@@ -108,6 +162,21 @@ export default function ReportPage() {
                   <h2 className="text-lg font-black">{report.headline}</h2>
                 </div>
                 <span className="text-3xl">🐾</span>
+              </div>
+              {/* 보호자명 · 방문일 메타 */}
+              <div className="mt-3 grid grid-cols-3 gap-2 bg-white/10 rounded-xl px-3 py-2.5 text-[11px]">
+                <div>
+                  <p className="text-emerald-50/70">보호자</p>
+                  <p className="font-bold">{report.ownerName ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-emerald-50/70">최근 방문일</p>
+                  <p className="font-bold">{report.lastVisit ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-emerald-50/70">최초 방문일</p>
+                  <p className="font-bold">{report.firstVisit ?? "-"}</p>
+                </div>
               </div>
             </div>
 

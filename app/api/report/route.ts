@@ -6,6 +6,9 @@ export const dynamic = "force-dynamic";
 interface ReportSection { icon: string; title: string; body: string }
 interface ReportData {
   petName: string;
+  ownerName?: string;
+  firstVisit?: string;
+  lastVisit?: string;
   headline: string;
   sections: ReportSection[];
   reminders: string[];
@@ -24,7 +27,7 @@ function buildFallbackReport(p: any): ReportData {
   const info = `${p.breed ?? "-"} · ${p.age ?? "-"}세`;
   const typeLabel = TYPE_LABEL[p.messageType] ?? "정기 관리";
   const sections: ReportSection[] = [
-    { icon: "🐾", title: "기본 정보", body: `${name} (${info})\n최근 케어 단계: ${typeLabel}` },
+    { icon: "🐾", title: "기본 정보", body: `${name} (${info})\n보호자: ${p.ownerName ?? "-"}\n최초 방문: ${p.firstVisit ?? "-"} · 최근 방문: ${p.lastVisit ?? "-"}\n최근 케어 단계: ${typeLabel}` },
   ];
   const reminders: string[] = [];
 
@@ -57,6 +60,9 @@ function buildFallbackReport(p: any): ReportData {
 
   return {
     petName: name,
+    ownerName: p.ownerName,
+    firstVisit: p.firstVisit,
+    lastVisit: p.lastVisit,
     headline: `${name}의 건강 요약 레포트`,
     sections,
     reminders,
@@ -85,7 +91,10 @@ export async function POST(req: NextRequest) {
 {"headline":"제목","sections":[{"icon":"이모지","title":"섹션 제목","body":"내용(2~4문장)"}],"reminders":["챙겨야 할 일정/할 일"]}`;
     const user = `환자 진료 데이터:
 - 이름: ${p.petName}
+- 보호자: ${p.ownerName ?? "-"}
 - 품종/나이: ${p.breed ?? "-"}, ${p.age ?? "-"}세
+- 최초 방문일: ${p.firstVisit ?? "-"}
+- 최근 방문일: ${p.lastVisit ?? "-"}
 - 최근 케어 유형: ${TYPE_LABEL[p.messageType] ?? p.messageType ?? "-"}
 - 수술/처치: ${p.surgeryType ?? "-"}
 - 처방약: ${p.medications ?? "-"}
@@ -103,6 +112,9 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(m[0]);
     const report: ReportData = {
       petName: p.petName,
+      ownerName: p.ownerName,
+      firstVisit: p.firstVisit,
+      lastVisit: p.lastVisit,
       headline: parsed.headline ?? `${p.petName}의 건강 요약 레포트`,
       sections: Array.isArray(parsed.sections) && parsed.sections.length ? parsed.sections : buildFallbackReport(p).sections,
       reminders: Array.isArray(parsed.reminders) ? parsed.reminders : [],
