@@ -2,12 +2,13 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 
-export type NavKey = "dashboard" | "triage" | "messages" | "pets" | "owners" | "templates" | "insight" | "marketing" | "automation";
+export type NavKey = "dashboard" | "triage" | "messages" | "report" | "pets" | "owners" | "templates" | "insight" | "marketing" | "automation";
 
 const NAV: { key: NavKey; href: string; label: string; d: string; isNew?: boolean }[] = [
   { key: "dashboard",  href: "/",           label: "오늘의 케어 메시지", d: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { key: "messages",   href: "/messages",   label: "메시지 관리",       d: "M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" },
   { key: "triage",     href: "/triage",     label: "보호자 답장 대응",   d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", isNew: true },
+  { key: "report",     href: "/report",     label: "건강 레포트",        d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", isNew: true },
   { key: "pets",       href: "/pets",       label: "반려동물",          d: "M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" },
   { key: "owners",     href: "/owners",     label: "보호자",            d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
   { key: "templates",  href: "/templates",  label: "템플릿",            d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },

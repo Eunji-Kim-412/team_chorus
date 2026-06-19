@@ -117,6 +117,7 @@ function ComposeForm() {
         messages: data.messages ?? null,
         patientName: form.patientName,
         messageType,
+        language: form.language ?? "ko",
       }));
       router.push("/result");
     } catch (err: unknown) {

@@ -9,6 +9,15 @@ interface ResultData {
   messages: MultiMessage[] | null;
   patientName: string;
   messageType: string;
+  language?: string;
+}
+
+type Severity = "error" | "warning";
+interface VCheck { key: string; label: string; ok: boolean; severity: Severity }
+interface VIssue { severity: Severity; label: string; detail: string }
+interface VerifyResult {
+  passed: boolean; score: number; errorCount: number; warningCount: number;
+  checks: VCheck[]; issues: VIssue[]; aiUsed: boolean;
 }
 
 function ResultContent() {
@@ -20,6 +29,8 @@ function ResultContent() {
   const [sending, setSending] = useState(false);
   const [toast, setToast] = useState(false);
   const [checklist, setChecklist] = useState([false, false, false, false]);
+  const [verify, setVerify] = useState<VerifyResult | null>(null);
+  const [verifying, setVerifying] = useState(false);
 
   const CHECKLIST_ITEMS = [
     "반려동물 이름 및 품종이 정확한지 확인했습니다",
@@ -41,6 +52,28 @@ function ResultContent() {
   const isMulti = data?.messages && data.messages.length > 1;
   const currentText = editedList[activeTab] ?? "";
   const updateText = (val: string) => setEditedList((prev) => prev.map((t, i) => (i === activeTab ? val : t)));
+
+  // 🤖 AI 자동 검수: 안내문이 바뀔 때마다 필수항목·위험표현·할루시네이션 점검
+  useEffect(() => {
+    if (!data || !currentText.trim()) { setVerify(null); return; }
+    setVerifying(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch("/api/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: currentText, messageType: data.messageType, language: data.language ?? "ko" }),
+        });
+        if (res.ok) setVerify(await res.json());
+      } catch {
+        /* 무시 */
+      } finally {
+        setVerifying(false);
+      }
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentText, data]);
   const handleCopy = async () => {
     await navigator.clipboard.writeText(currentText);
     setCopied(true);
@@ -141,6 +174,66 @@ function ResultContent() {
             className="flex flex-col items-center justify-center gap-1.5 py-4 bg-white border border-gray-200 rounded-2xl hover:border-gray-300 hover:bg-gray-50 transition-all text-sm font-medium text-gray-700 shadow-sm">
             <span className="text-xl">✏️</span><span>다시 작성</span>
           </button>
+        </div>
+
+        {/* 🤖 AI 자동 검수 */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+              🤖 AI 자동 검수
+              {verify && (
+                <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
+                  {verify.aiUsed ? "AI+규칙" : "규칙 기반"}
+                </span>
+              )}
+            </h2>
+            {verifying ? (
+              <span className="text-xs text-gray-400 font-medium">검수 중…</span>
+            ) : verify ? (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                verify.errorCount > 0 ? "bg-red-100 text-red-700"
+                  : verify.warningCount > 0 ? "bg-amber-100 text-amber-700"
+                  : "bg-emerald-100 text-emerald-700"
+              }`}>
+                {verify.errorCount > 0 ? `위험 ${verify.errorCount}` : verify.warningCount > 0 ? `주의 ${verify.warningCount}` : "통과"} · {verify.score}점
+              </span>
+            ) : null}
+          </div>
+
+          {verify && (
+            <>
+              {/* 필수 항목 체크 */}
+              <div className="flex flex-wrap gap-1.5">
+                {verify.checks.map((c) => (
+                  <span key={c.key} className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded-lg ${
+                    c.ok ? "bg-emerald-50 text-emerald-700" : c.severity === "error" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+                  }`}>
+                    {c.ok ? "✓" : "✗"} {c.label}
+                  </span>
+                ))}
+              </div>
+
+              {/* 발견된 이슈 */}
+              {verify.issues.length > 0 ? (
+                <div className="space-y-1.5">
+                  {verify.issues.map((it, i) => (
+                    <div key={i} className={`flex items-start gap-2 p-2.5 rounded-xl text-xs ${
+                      it.severity === "error" ? "bg-red-50 border border-red-100" : "bg-amber-50 border border-amber-100"
+                    }`}>
+                      <span className="flex-shrink-0">{it.severity === "error" ? "🚫" : "⚠️"}</span>
+                      <div>
+                        <span className={`font-bold ${it.severity === "error" ? "text-red-700" : "text-amber-700"}`}>{it.label}</span>
+                        {it.detail && <span className="text-gray-600"> — {it.detail}</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-emerald-600 font-medium">✅ 필수 안내 항목이 모두 포함됐고, 위험 표현이 발견되지 않았습니다.</p>
+              )}
+              <p className="text-[11px] text-gray-400">AI 검수는 보조 도구입니다. 최종 판단·발송은 아래 수의사 확인 후 진행하세요.</p>
+            </>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-3">
