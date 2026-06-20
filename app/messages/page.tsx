@@ -202,7 +202,7 @@ export default function MessageAgentPage() {
   );
 
   return (
-    <AppLayout active="messages" title="메시지 관리">
+    <AppLayout active="messages" title="메시지 에이전트">
       {toast && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white text-sm font-semibold px-5 py-3 rounded-2xl shadow-xl">
           {toast}
