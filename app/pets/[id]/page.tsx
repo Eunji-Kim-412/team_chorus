@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { usePatients } from "@/context/PatientsContext";
-import type { MessageType } from "@/lib/ai/types";
+import { buildConversation, inboundFrom, type InboundUrgency } from "@/lib/conversations";
+
+const URGENCY_META: Record<InboundUrgency, { label: string; badge: string }> = {
+  emergency: { label: "응급", badge: "bg-red-100 text-red-700" },
+  caution: { label: "주의", badge: "bg-amber-100 text-amber-700" },
+  routine: { label: "일반", badge: "bg-emerald-100 text-emerald-700" },
+};
+
+type HistoryTab = "sent" | "received" | "conversation";
 
 const TYPE_META: Record<string, { label: string; icon: string; color: string; bg: string }> = {
   vaccination:    { label: "예방접종", icon: "💉", color: "text-emerald-700", bg: "bg-emerald-50" },
@@ -35,6 +42,14 @@ export default function PetDetailPage() {
         .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime()),
     [messages, id]
   );
+
+  const conversation = useMemo(
+    () => (pet ? buildConversation(pet.id, pet.petName, history) : []),
+    [pet, history]
+  );
+  const received = useMemo(() => inboundFrom(conversation), [conversation]);
+
+  const [tab, setTab] = useState<HistoryTab>("sent");
 
   const goCompose = () => {
     if (!pet) return;
@@ -83,36 +98,117 @@ export default function PetDetailPage() {
               </div>
             </div>
 
-            {/* 메시지 발송 이력 */}
-            <h3 className="text-sm font-bold text-gray-900 mb-3">발송 이력</h3>
-            {history.length === 0 ? (
-              <div className="bg-white border border-gray-100 rounded-2xl shadow-sm py-14 text-center">
-                <div className="text-3xl mb-2">📭</div>
-                <p className="text-sm text-gray-400 mb-4">아직 이 반려동물에게 발송된 메시지가 없어요.</p>
-                <button onClick={goCompose} className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-xl transition-colors">
-                  첫 메시지 작성하기 →
+            {/* 이력 탭 */}
+            <div className="flex items-center gap-1 mb-3 border-b border-gray-100">
+              {([
+                { k: "sent", label: `발송 이력 (${history.length})` },
+                { k: "received", label: `수신 이력 (${received.length})` },
+                { k: "conversation", label: `대화 이력 (${conversation.length})` },
+              ] as { k: HistoryTab; label: string }[]).map((t) => (
+                <button
+                  key={t.k}
+                  onClick={() => setTab(t.k)}
+                  className={`px-3 py-2 text-sm font-bold border-b-2 -mb-px transition-colors ${
+                    tab === t.k
+                      ? "border-emerald-600 text-emerald-700"
+                      : "border-transparent text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  {t.label}
                 </button>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {history.map((m) => {
-                  const meta = TYPE_META[m.messageType] ?? { label: m.messageType, icon: "📩", color: "text-gray-700", bg: "bg-gray-50" };
-                  return (
-                    <div key={m.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-start gap-3">
-                      <div className={`w-10 h-10 rounded-xl ${meta.bg} flex items-center justify-center text-lg flex-shrink-0`}>{meta.icon}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${meta.bg} ${meta.color}`}>{meta.label}</span>
-                          <span className="text-[11px] text-gray-400">{formatDateTime(m.sentAt)}</span>
-                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full ml-auto">발송완료</span>
+              ))}
+            </div>
+
+            {/* 발송 이력 */}
+            {tab === "sent" &&
+              (history.length === 0 ? (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm py-14 text-center">
+                  <div className="text-3xl mb-2">📭</div>
+                  <p className="text-sm text-gray-400 mb-4">아직 이 반려동물에게 발송된 메시지가 없어요.</p>
+                  <button onClick={goCompose} className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-xl transition-colors">
+                    첫 메시지 작성하기 →
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {history.map((m) => {
+                    const meta = TYPE_META[m.messageType] ?? { label: m.messageType, icon: "📩", color: "text-gray-700", bg: "bg-gray-50" };
+                    return (
+                      <div key={m.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-start gap-3">
+                        <div className={`w-10 h-10 rounded-xl ${meta.bg} flex items-center justify-center text-lg flex-shrink-0`}>{meta.icon}</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${meta.bg} ${meta.color}`}>{meta.label}</span>
+                            <span className="text-[11px] text-gray-400">{formatDateTime(m.sentAt)}</span>
+                            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full ml-auto">발송완료</span>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{m.preview}</p>
                         </div>
-                        <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{m.preview}</p>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              ))}
+
+            {/* 수신 이력 */}
+            {tab === "received" &&
+              (received.length === 0 ? (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm py-14 text-center">
+                  <div className="text-3xl mb-2">📥</div>
+                  <p className="text-sm text-gray-400">아직 이 반려동물 보호자에게서 받은 메시지가 없어요.</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {received.map((m) => {
+                    const u = URGENCY_META[m.urgency ?? "routine"];
+                    return (
+                      <div key={m.id} className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-lg flex-shrink-0">💬</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className="text-xs font-bold text-gray-700">보호자</span>
+                            <span className="text-[11px] text-gray-400">{formatDateTime(m.at)}</span>
+                            <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ml-auto ${u.badge}`}>{u.label}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{m.text}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+
+            {/* 대화 이력 */}
+            {tab === "conversation" &&
+              (conversation.length === 0 ? (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm py-14 text-center">
+                  <div className="text-3xl mb-2">🗨️</div>
+                  <p className="text-sm text-gray-400">아직 주고받은 대화가 없어요.</p>
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 space-y-3">
+                  {conversation.map((t) => {
+                    const out = t.direction === "out";
+                    const u = t.urgency ? URGENCY_META[t.urgency] : null;
+                    return (
+                      <div key={t.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                        <div className={`max-w-[78%] flex flex-col gap-0.5 ${out ? "items-end" : "items-start"}`}>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-gray-400">{out ? "병원" : "보호자"}</span>
+                            {!out && u && <span className={`text-[9px] font-semibold px-1 py-0.5 rounded-full ${u.badge}`}>{u.label}</span>}
+                            <span className="text-[10px] text-gray-300">{formatDateTime(t.at)}</span>
+                          </div>
+                          <div className={`px-3.5 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+                            out ? "bg-emerald-600 text-white rounded-tr-sm" : "bg-gray-100 text-gray-700 rounded-tl-sm"
+                          }`}>
+                            {t.text}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
           </>
         )}
       </div>
