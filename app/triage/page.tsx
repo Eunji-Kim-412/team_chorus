@@ -129,7 +129,7 @@ export default function TriagePage() {
   };
 
   return (
-    <AppLayout active="triage" title="보호자 답장 대응">
+    <AppLayout active="triage" title="채팅 에이전트">
       <div className="px-6 py-6 max-w-3xl mx-auto">
         <p className="text-sm text-gray-500 mb-4">
           보호자와의 <span className="font-semibold text-gray-700">대화 이력</span>을 불러와, 마지막 보호자 메시지를 에이전트가
