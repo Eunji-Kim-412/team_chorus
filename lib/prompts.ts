@@ -14,6 +14,12 @@ const LANGUAGE_INSTRUCTIONS: Record<Language, string> = {
 - Do NOT use Korean greetings like '안녕하세요', '보호자님', '감사합니다'.
 - Correct Chinese greeting example: "[PetName] 的主人您好！"
 - Wrong: "보리 보호자님, 안녕하세요" ← this is strictly forbidden.`,
+  fr: `CRITICAL LANGUAGE RULE — FRENCH (français) ONLY:
+- Write 100% in French. Not a single Korean character (한글) is allowed.
+- Pet names and owner names are proper nouns — keep their spelling but write ALL surrounding text in French.
+- Do NOT use Korean greetings like '안녕하세요', '보호자님', '감사합니다'.
+- Correct French greeting example: "Bonjour, propriétaire de [PetName] !"
+- Wrong: "보리 보호자님, 안녕하세요" ← this is strictly forbidden.`,
 };
 
 const TONE_INSTRUCTIONS: Record<Tone, string> = {
@@ -45,12 +51,14 @@ const LANG_PREFIX: Record<Language, string> = {
   ko: "⚠️ 전체 SMS를 한국어로만 작성하세요.",
   en: "⚠️ ENGLISH ONLY — No Korean characters at all. Greetings must also be in English (e.g. 'Hello, Bori's owner!').",
   zh: "⚠️ 仅限简体中文 — 不允许任何韩文字符。问候语也必须用中文（例如：'보리 的主人您好！'）。",
+  fr: "⚠️ FRANÇAIS UNIQUEMENT — Aucun caractère coréen autorisé. Les salutations doivent aussi être en français (ex. : 'Bonjour, propriétaire de Bori !').",
 };
 
 const LANG_SUFFIX: Record<Language, string> = {
   ko: "반드시 한국어로만 작성하세요.",
   en: "FINAL CHECK: Is every single word in English? If not, rewrite. Zero Korean characters allowed.",
   zh: "最终检查：每个字都是中文吗？如果不是，请重写。不允许任何韩文字符。",
+  fr: "VÉRIFICATION FINALE : chaque mot est-il en français ? Sinon, réécrivez. Aucun caractère coréen autorisé.",
 };
 
 export function buildUserPrompt(info: PatientInfo): string {

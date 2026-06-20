@@ -9,6 +9,7 @@ const LANGUAGES: { value: Language; label: string; flag: string }[] = [
   { value: "ko", label: "한국어", flag: "🇰🇷" },
   { value: "en", label: "English", flag: "🇺🇸" },
   { value: "zh", label: "中文", flag: "🇨🇳" },
+  { value: "fr", label: "Français", flag: "🇫🇷" },
 ];
 
 const TYPE_META: Record<MessageType, { title: string; icon: string; bg: string }> = {

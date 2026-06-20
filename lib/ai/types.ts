@@ -8,7 +8,7 @@ export type MessageType =
   | "post-surgery"
   | "revisit";
 
-export type Language = "ko" | "en" | "zh";
+export type Language = "ko" | "en" | "zh" | "fr";
 export type Tone = "friendly" | "simple" | "custom";
 
 export interface PatientInfo {
