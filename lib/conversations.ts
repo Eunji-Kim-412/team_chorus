@@ -61,15 +61,58 @@ function pick<T>(arr: T[], rand: () => number): T {
 
 const HOUR = 3600 * 1000;
 
+function daysAgoISO(days: number, hour: number, min = 0): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  d.setHours(hour, min, 0, 0);
+  return d.toISOString();
+}
+
+// ── 데모용 큐레이션 대화 ── (환자 id로 매핑, 있으면 생성 대신 이 대화를 사용)
+interface CuratedTurn {
+  who: Direction;
+  days: number;
+  hour: number;
+  min?: number;
+  text: string;
+  urgency?: InboundUrgency;
+}
+
+export const CURATED_CONVERSATIONS: Record<string, CuratedTurn[]> = {
+  // 코코 (id 6, 푸들 · 강민서 보호자, 발치 수술 후) — 구토 데모
+  "6": [
+    { who: "out", days: 4, hour: 11, text: "안녕하세요 🐾 코코 발치 수술 잘 끝났어요. 처방약(진통제·항생제)은 하루 2회 식후 급여 부탁드리고, 봉합 부위는 일주일간 보호해 주세요. 이상이 있으면 바로 연락 주세요." },
+    { who: "in", days: 3, hour: 9, min: 20, text: "네 감사합니다. 약은 잘 먹이고 있어요 :)", urgency: "routine" },
+    { who: "out", days: 3, hour: 10, text: "코코 보호자님, 잘 챙겨주고 계시네요 🙂 식욕과 활력이 점차 돌아올 거예요. 다음 내원일에 실밥 제거 예정입니다." },
+    { who: "in", days: 1, hour: 19, min: 5, text: "오늘 산책은 시켜도 될까요?", urgency: "routine" },
+    { who: "out", days: 1, hour: 20, text: "수술 부위 보호를 위해 이번 주는 가벼운 실내 활동만 권장드려요. 격한 산책은 실밥 제거 후에 시작해 주세요 🐾" },
+    { who: "in", days: 0, hour: 8, min: 40, text: "강아지가 계속 토하는데 괜찮을까요? 어제부터 밥도 잘 안 먹고 축 처져 있어요.", urgency: "emergency" },
+  ],
+};
+
 /**
  * 발송 이력을 기반으로 보호자 수신 메시지 + 병원 후속 응답을 결정적으로 합성한다.
  * 같은 환자/발송이력이면 항상 동일한 대화가 생성된다(시드 기반).
+ * 단, CURATED_CONVERSATIONS 에 정의된 환자는 데모용 큐레이션 대화를 사용한다.
  */
 export function buildConversation(
   petId: string,
   petName: string,
   sent: MessageLog[]
 ): ConversationTurn[] {
+  const curated = CURATED_CONVERSATIONS[petId];
+  if (curated) {
+    return curated
+      .map((c, i) => ({
+        id: `curated-${petId}-${i}`,
+        direction: c.who,
+        at: daysAgoISO(c.days, c.hour, c.min ?? 0),
+        text: c.text,
+        urgency: c.who === "in" ? c.urgency : undefined,
+      }))
+      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }
+
   const rand = seeded((parseInt(petId, 10) || 1) * 7919);
   const turns: ConversationTurn[] = [];
 
